@@ -1,5 +1,6 @@
 /**
  * The MIT License
+ * Copyright (c) 2019- Nordic Institute for Interoperability Solutions (NIIS)
  * Copyright (c) 2018 Estonian Information System Authority (RIA),
  * Nordic Institute for Interoperability Solutions (NIIS), Population Register Centre (VRK)
  * Copyright (c) 2015-2017 Estonian Information System Authority (RIA), Population Register Centre (VRK)
@@ -26,14 +27,13 @@ package org.niis.xroad.restapi.service;
 
 import org.niis.xroad.restapi.exceptions.ErrorDeviation;
 
+import static org.niis.xroad.restapi.exceptions.DeviationCodes.ERROR_BACKUP_FILE_NOT_FOUND;
+
 /**
  * If backup file was not found
  */
 public class BackupFileNotFoundException extends NotFoundException {
-
-    public static final String ERROR_BACKUP_FILE_NOT_FOUND = "backup_file_not_found";
-
-    public BackupFileNotFoundException(String s)  {
+    public BackupFileNotFoundException(String s) {
         super(s, new ErrorDeviation(ERROR_BACKUP_FILE_NOT_FOUND));
     }
 }

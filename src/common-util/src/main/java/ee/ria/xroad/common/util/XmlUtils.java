@@ -1,5 +1,6 @@
 /**
  * The MIT License
+ * Copyright (c) 2019- Nordic Institute for Interoperability Solutions (NIIS)
  * Copyright (c) 2018 Estonian Information System Authority (RIA),
  * Nordic Institute for Interoperability Solutions (NIIS), Population Register Centre (VRK)
  * Copyright (c) 2015-2017 Estonian Information System Authority (RIA), Population Register Centre (VRK)
@@ -52,6 +53,7 @@ import javax.xml.xpath.XPathConstants;
 import javax.xml.xpath.XPathExpressionException;
 import javax.xml.xpath.XPathFactory;
 
+import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 import java.io.StringWriter;
 import java.nio.charset.StandardCharsets;
@@ -223,7 +225,9 @@ public final class XmlUtils {
      * @throws Exception if any errors occur
      */
     public static byte[] canonicalize(String algorithmUri, Node node) throws Exception {
-        return Canonicalizer.getInstance(algorithmUri).canonicalizeSubtree(node);
+        ByteArrayOutputStream buf = new ByteArrayOutputStream();
+        Canonicalizer.getInstance(algorithmUri).canonicalizeSubtree(node, buf);
+        return buf.toByteArray();
     }
 
     /**

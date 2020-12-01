@@ -1,5 +1,6 @@
 /**
  * The MIT License
+ * Copyright (c) 2019- Nordic Institute for Interoperability Solutions (NIIS)
  * Copyright (c) 2018 Estonian Information System Authority (RIA),
  * Nordic Institute for Interoperability Solutions (NIIS), Population Register Centre (VRK)
  * Copyright (c) 2015-2017 Estonian Information System Authority (RIA), Population Register Centre (VRK)
@@ -24,23 +25,15 @@
  */
 package org.niis.xroad.restapi.service;
 
-import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.compress.archivers.tar.TarArchiveEntry;
 import org.apache.commons.compress.archivers.tar.TarArchiveOutputStream;
 import org.junit.Before;
 import org.junit.Test;
-import org.junit.runner.RunWith;
+import org.niis.xroad.restapi.config.audit.AuditDataHelper;
 import org.niis.xroad.restapi.dto.BackupFile;
 import org.niis.xroad.restapi.exceptions.DeviationAwareRuntimeException;
-import org.niis.xroad.restapi.repository.BackupRepository;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.jdbc.AutoConfigureTestDatabase;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.mock.web.MockMultipartFile;
-import org.springframework.security.test.context.support.WithMockUser;
-import org.springframework.test.context.junit4.SpringRunner;
-import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.ByteArrayOutputStream;
@@ -58,26 +51,26 @@ import static org.junit.Assert.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.when;
+import static org.niis.xroad.restapi.exceptions.DeviationCodes.ERROR_INVALID_BACKUP_FILE;
+import static org.niis.xroad.restapi.exceptions.DeviationCodes.ERROR_INVALID_FILENAME;
+import static org.niis.xroad.restapi.exceptions.DeviationCodes.WARNING_FILE_ALREADY_EXISTS;
 
 /**
  * Test BackupService
  */
-@RunWith(SpringRunner.class)
-@SpringBootTest
-@AutoConfigureTestDatabase
-@Transactional
-@Slf4j
-@WithMockUser
-public class BackupServiceTest {
-
-    @MockBean
-    private BackupRepository backupRepository;
-
-    @MockBean
-    private ExternalProcessRunner externalProcessRunner;
+public class BackupServiceTest extends AbstractServiceTestContext {
 
     @Autowired
-    private BackupService backupService;
+    BackupService backupService;
+
+    @Autowired
+    ExternalProcessRunner externalProcessRunner;
+
+    @Autowired
+    AuditDataHelper auditDataHelper;
+
+    @Autowired
+    ServerConfService serverConfService;
 
     private static final String BASE_DIR = "/tmp/backups/";
 
@@ -94,12 +87,6 @@ public class BackupServiceTest {
     private static final Long BACKUP_FILE_2_CREATED_AT_MILLIS = 1581477302684L;
 
     private static final String VALID_TAR_LABEL = "security_XROAD-6.24.0_TESTSS";
-
-    public static final String ERROR_INVALID_FILENAME = "invalid_filename";
-
-    public static final String ERROR_INVALID_BACKUP_FILE = "invalid_backup_file";
-
-    private static final String WARNING_FILE_ALREADY_EXISTS = "warning_file_already_exists";
 
     private final MockMultipartFile mockMultipartFile = new MockMultipartFile("test", "content".getBytes());
 
@@ -120,7 +107,7 @@ public class BackupServiceTest {
     }
 
     @Test
-    public void getBackups() throws Exception {
+    public void getBackups() {
         List<BackupFile> backups = backupService.getBackupFiles();
 
         assertEquals(2, backups.size());
@@ -188,10 +175,10 @@ public class BackupServiceTest {
 
     @Test
     public void addBackupFails() throws Exception {
-        when(externalProcessRunner.executeAndThrowOnFailure(any(), any())).thenThrow(new ProcessFailedException(""));
+        mockExternalProcessRunnerFail();
         try {
             backupService.generateBackup();
-            fail("should throw ProcessFailedException");
+            fail("should throw DeviationAwareRuntimeException");
         } catch (DeviationAwareRuntimeException expected) {
             // success
         }
@@ -279,5 +266,17 @@ public class BackupServiceTest {
 
             return new MockMultipartFile(filename, filename, "multipart/form-data", baos.toByteArray());
         }
+    }
+
+    private void mockExternalProcessRunnerFail() {
+        externalProcessRunner = new ExternalProcessRunner() {
+            @Override
+            public ProcessResult executeAndThrowOnFailure(String command, String... args) throws
+                    ProcessNotExecutableException, ProcessFailedException, InterruptedException {
+                throw new ProcessFailedException("");
+            }
+        };
+        backupService = new BackupService(backupRepository, serverConfService, externalProcessRunner,
+                null, auditDataHelper);
     }
 }

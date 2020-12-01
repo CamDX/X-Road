@@ -1,5 +1,6 @@
 /**
  * The MIT License
+ * Copyright (c) 2019- Nordic Institute for Interoperability Solutions (NIIS)
  * Copyright (c) 2018 Estonian Information System Authority (RIA),
  * Nordic Institute for Interoperability Solutions (NIIS), Population Register Centre (VRK)
  * Copyright (c) 2015-2017 Estonian Information System Authority (RIA), Population Register Centre (VRK)
@@ -31,12 +32,9 @@ import ee.ria.xroad.signer.protocol.SignerClient;
 import akka.actor.ActorSystem;
 import com.typesafe.config.ConfigFactory;
 import lombok.extern.slf4j.Slf4j;
-import scala.concurrent.Await;
-import scala.concurrent.duration.Duration;
 
 import java.util.Arrays;
 import java.util.List;
-import java.util.concurrent.TimeoutException;
 
 import static ee.ria.xroad.common.SystemProperties.CONF_FILE_CONFPROXY;
 
@@ -121,8 +119,8 @@ public final class ConfProxyMain {
     /**
      * Shutdown configuration proxy components.
      */
-    private static void shutdown() throws TimeoutException, InterruptedException {
+    private static void shutdown() {
         log.trace("shutdown()");
-        Await.ready(actorSystem.terminate(), Duration.Inf());
+        actorSystem.terminate();
     }
 }

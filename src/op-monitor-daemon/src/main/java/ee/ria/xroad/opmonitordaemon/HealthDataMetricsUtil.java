@@ -1,5 +1,6 @@
 /**
  * The MIT License
+ * Copyright (c) 2019- Nordic Institute for Interoperability Solutions (NIIS)
  * Copyright (c) 2018 Estonian Information System Authority (RIA),
  * Nordic Institute for Interoperability Solutions (NIIS), Population Register Centre (VRK)
  * Copyright (c) 2015-2017 Estonian Information System Authority (RIA), Population Register Centre (VRK)
@@ -141,19 +142,19 @@ final class HealthDataMetricsUtil {
                 // ID so Zabbix won't split the value when processing the
                 // key of the item such as:
                 // jmx[com.example:Type=Hello,all.fruits.apple.weight]
-                .replaceAll("\\.", "&#46;")
+                .replace(".", "&#46;")
                 // For Zabbix: escape the backslash, the space and the comma:
-                .replaceAll("\\\\", "&#92;")
-                .replaceAll(" ", "&#32;")
-                .replaceAll(",", "&#44;")
+                .replace("\\", "&#92;")
+                .replace(" ", "&#32;")
+                .replace(",", "&#44;")
                 // For Zabbix: escape the square brackets that are used as
                 // the containers of the JMX parameter name and attribute
                 // such as:
                 // jmx[<parameter name [with square brackets], attribute>].
-                .replaceAll("\\[", "&#91;").replaceAll("]", "&#93;")
+                .replace("[", "&#91;").replace("]", "&#93;")
                 // Replace forward slashes to be able to convert the identifier
                 // string back into a service identifier object
-                .replaceAll("/", "&#47;");
+                .replace("/", "&#47;");
     }
 
     /**

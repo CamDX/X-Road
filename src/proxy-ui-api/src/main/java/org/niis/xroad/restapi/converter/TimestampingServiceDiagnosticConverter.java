@@ -1,5 +1,6 @@
 /**
  * The MIT License
+ * Copyright (c) 2019- Nordic Institute for Interoperability Solutions (NIIS)
  * Copyright (c) 2018 Estonian Information System Authority (RIA),
  * Nordic Institute for Interoperability Solutions (NIIS), Population Register Centre (VRK)
  * Copyright (c) 2015-2017 Estonian Information System Authority (RIA), Population Register Centre (VRK)
@@ -30,7 +31,6 @@ import com.google.common.collect.Streams;
 import org.niis.xroad.restapi.openapi.model.DiagnosticStatusClass;
 import org.niis.xroad.restapi.openapi.model.TimestampingServiceDiagnostics;
 import org.niis.xroad.restapi.openapi.model.TimestampingStatus;
-import org.niis.xroad.restapi.util.FormatUtils;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
@@ -53,8 +53,7 @@ public class TimestampingServiceDiagnosticConverter {
                 diagnosticsStatus.getReturnCode());
         timestampingServiceDiagnostics.setStatusClass(statusClass.orElse(null));
         if (diagnosticsStatus.getPrevUpdate() != null) {
-            timestampingServiceDiagnostics.setPrevUpdateAt(FormatUtils.fromLocalTimeToOffsetDateTime(
-                    diagnosticsStatus.getPrevUpdate(), true));
+            timestampingServiceDiagnostics.setPrevUpdateAt(diagnosticsStatus.getPrevUpdate());
         }
 
         return timestampingServiceDiagnostics;

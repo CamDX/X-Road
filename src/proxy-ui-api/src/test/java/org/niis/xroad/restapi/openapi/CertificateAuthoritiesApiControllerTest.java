@@ -1,5 +1,6 @@
 /**
  * The MIT License
+ * Copyright (c) 2019- Nordic Institute for Interoperability Solutions (NIIS)
  * Copyright (c) 2018 Estonian Information System Authority (RIA),
  * Nordic Institute for Interoperability Solutions (NIIS), Population Register Centre (VRK)
  * Copyright (c) 2015-2017 Estonian Information System Authority (RIA), Population Register Centre (VRK)
@@ -30,23 +31,15 @@ import ee.ria.xroad.common.certificateprofile.DnFieldValue;
 import ee.ria.xroad.signer.protocol.dto.KeyInfo;
 import ee.ria.xroad.signer.protocol.dto.KeyUsageInfo;
 
-import lombok.extern.slf4j.Slf4j;
 import org.junit.Before;
 import org.junit.Test;
-import org.junit.runner.RunWith;
 import org.niis.xroad.restapi.dto.ApprovedCaDto;
 import org.niis.xroad.restapi.openapi.model.KeyUsageType;
-import org.niis.xroad.restapi.service.CertificateAuthorityService;
 import org.niis.xroad.restapi.service.KeyNotFoundException;
-import org.niis.xroad.restapi.service.KeyService;
 import org.niis.xroad.restapi.util.TokenTestUtils.KeyInfoBuilder;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.jdbc.AutoConfigureTestDatabase;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.test.context.support.WithMockUser;
-import org.springframework.test.context.junit4.SpringRunner;
 import org.springframework.transaction.annotation.Transactional;
 
 import javax.security.auth.x500.X500Principal;
@@ -57,31 +50,22 @@ import java.util.List;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.when;
 
 /**
  * test cert auth api
  */
-@RunWith(SpringRunner.class)
-@SpringBootTest
-@AutoConfigureTestDatabase
 @Transactional
-@Slf4j
-public class CertificateAuthoritiesApiControllerTest {
+public class CertificateAuthoritiesApiControllerTest extends AbstractApiControllerTestContext {
+
+    @Autowired
+    CertificateAuthoritiesApiController caController;
 
     private static final String GOOD_SIGN_KEY_ID = "sign-key-which-exists";
     private static final String GOOD_AUTH_KEY_ID = "auth-key-which-exists";
     public static final String GENERAL_PURPOSE_CA_NAME = "fi-not-auth-only";
-
-    @MockBean
-    private KeyService keyService;
-
-    @MockBean
-    private CertificateAuthorityService certificateAuthorityService;
-
-    @Autowired
-    private CertificateAuthoritiesApiController caController;
 
     @Before
     public void setUp() throws Exception {
@@ -107,7 +91,7 @@ public class CertificateAuthoritiesApiControllerTest {
                 .authenticationOnly(false)
                 .build());
         when(certificateAuthorityService.getCertificateAuthorities(any())).thenReturn(approvedCAInfos);
-        when(certificateAuthorityService.getCertificateProfile(any(), any(), any()))
+        when(certificateAuthorityService.getCertificateProfile(any(), any(), any(), anyBoolean()))
                 .thenReturn(new CertificateProfileInfo() {
                     @Override
                     public DnFieldDescription[] getSubjectFields() {
@@ -121,6 +105,14 @@ public class CertificateAuthoritiesApiControllerTest {
                     public void validateSubjectField(DnFieldValue field) throws Exception {
                     }
                 });
+    }
+
+    @Test
+    @WithMockUser(authorities = { "VIEW_APPROVED_CERTIFICATE_AUTHORITIES" })
+    public void getApprovedCertificatesWithViewPermission() throws Exception {
+        caController.getApprovedCertificateAuthorities(KeyUsageType.AUTHENTICATION, false);
+        caController.getApprovedCertificateAuthorities(null, false);
+        caController.getApprovedCertificateAuthorities(KeyUsageType.SIGNING, false);
     }
 
     @Test
@@ -157,11 +149,11 @@ public class CertificateAuthoritiesApiControllerTest {
     @WithMockUser(authorities = { "GENERATE_AUTH_CERT_REQ" })
     public void getSubjectFieldDescriptionsAuthWithAuthPermission() throws Exception {
         caController.getSubjectFieldDescriptions(GENERAL_PURPOSE_CA_NAME, KeyUsageType.AUTHENTICATION,
-                GOOD_AUTH_KEY_ID, "FI:GOV:M1");
+                GOOD_AUTH_KEY_ID, "FI:GOV:M1", false);
 
         try {
             caController.getSubjectFieldDescriptions(GENERAL_PURPOSE_CA_NAME, KeyUsageType.SIGNING,
-                    GOOD_SIGN_KEY_ID, "FI:GOV:M1");
+                    GOOD_SIGN_KEY_ID, "FI:GOV:M1", false);
             fail("should have thrown exception");
         } catch (AccessDeniedException expected) {
         }
@@ -171,11 +163,11 @@ public class CertificateAuthoritiesApiControllerTest {
     @WithMockUser(authorities = { "GENERATE_SIGN_CERT_REQ" })
     public void getSubjectFieldDescriptionsAuthWithSignPermission() throws Exception {
         caController.getSubjectFieldDescriptions(GENERAL_PURPOSE_CA_NAME, KeyUsageType.SIGNING,
-                GOOD_SIGN_KEY_ID, "FI:GOV:M1");
+                GOOD_SIGN_KEY_ID, "FI:GOV:M1", false);
 
         try {
             caController.getSubjectFieldDescriptions(GENERAL_PURPOSE_CA_NAME, KeyUsageType.AUTHENTICATION,
-                    GENERAL_PURPOSE_CA_NAME, "FI:GOV:M1");
+                    GENERAL_PURPOSE_CA_NAME, "FI:GOV:M1", false);
             fail("should have thrown exception");
         } catch (AccessDeniedException expected) {
         }
@@ -185,9 +177,9 @@ public class CertificateAuthoritiesApiControllerTest {
     @WithMockUser(authorities = { "GENERATE_SIGN_CERT_REQ", "GENERATE_AUTH_CERT_REQ" })
     public void getSubjectFieldsKeyIsOptional() throws Exception {
         caController.getSubjectFieldDescriptions(GENERAL_PURPOSE_CA_NAME, KeyUsageType.SIGNING,
-                null, "FI:GOV:M1");
+                null, "FI:GOV:M1", false);
         caController.getSubjectFieldDescriptions(GENERAL_PURPOSE_CA_NAME, KeyUsageType.AUTHENTICATION,
-                null, "FI:GOV:M1");
+                null, "FI:GOV:M1", false);
         // for Sonar "Add at least one assertion to this test case"
         assertTrue("should not have thrown exception", true);
     }

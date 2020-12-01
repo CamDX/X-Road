@@ -1,5 +1,6 @@
 /**
  * The MIT License
+ * Copyright (c) 2019- Nordic Institute for Interoperability Solutions (NIIS)
  * Copyright (c) 2018 Estonian Information System Authority (RIA),
  * Nordic Institute for Interoperability Solutions (NIIS), Population Register Centre (VRK)
  * Copyright (c) 2015-2017 Estonian Information System Authority (RIA), Population Register Centre (VRK)
@@ -41,10 +42,11 @@ import ee.ria.xroad.proxy.util.TestUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.bouncycastle.cert.ocsp.CertificateStatus;
 import org.bouncycastle.cert.ocsp.OCSPResp;
-import org.joda.time.DateTime;
 
 import java.security.PrivateKey;
 import java.security.cert.X509Certificate;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
@@ -91,7 +93,7 @@ public class TestKeyConf extends EmptyKeyConf {
 
         if (!ocspResponses.containsKey(certHash)) {
             try {
-                Date thisUpdate = new DateTime().plusDays(1).toDate();
+                Date thisUpdate = Date.from(Instant.now().plus(1, ChronoUnit.DAYS));
                 OCSPResp resp = OcspTestUtils.createOCSPResponse(cert,
                         GlobalConf.getCaCert("EE", cert), getOcspSignerCert(),
                         getOcspRequestKey(), CertificateStatus.GOOD,

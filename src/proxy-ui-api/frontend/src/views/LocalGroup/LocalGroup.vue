@@ -1,3 +1,28 @@
+<!--
+   The MIT License
+   Copyright (c) 2019- Nordic Institute for Interoperability Solutions (NIIS)
+   Copyright (c) 2018 Estonian Information System Authority (RIA),
+   Nordic Institute for Interoperability Solutions (NIIS), Population Register Centre (VRK)
+   Copyright (c) 2015-2017 Estonian Information System Authority (RIA), Population Register Centre (VRK)
+
+   Permission is hereby granted, free of charge, to any person obtaining a copy
+   of this software and associated documentation files (the "Software"), to deal
+   in the Software without restriction, including without limitation the rights
+   to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+   copies of the Software, and to permit persons to whom the Software is
+   furnished to do so, subject to the following conditions:
+
+   The above copyright notice and this permission notice shall be included in
+   all copies or substantial portions of the Software.
+
+   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+   IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+   FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+   AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+   LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+   OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+   THE SOFTWARE.
+ -->
 <template>
   <div class="xrd-tab-max-width">
     <div>
@@ -6,9 +31,9 @@
       <template>
         <div class="cert-hash">
           {{ $t('localGroup.localGroup') }}
-          <large-button v-if="showDelete" @click="deleteGroup()" outlined>{{
-            $t('action.delete')
-          }}</large-button>
+          <large-button v-if="showDelete" @click="deleteGroup()" outlined>
+            {{ $t('action.delete') }}
+          </large-button>
         </div>
       </template>
     </div>
@@ -34,6 +59,7 @@
       <div class="row-buttons">
         <large-button
           :disabled="!hasMembers"
+          v-if="canEditMembers"
           @click="removeAllMembers()"
           outlined
           >{{ $t('action.removeAll') }}</large-button
@@ -119,7 +145,7 @@
       :dialog="addMembersDialogVisible"
       :filtered="group.members"
       @cancel="closeMembersDialog"
-      @membersAdded="doAddMembers"
+      @members-added="doAddMembers"
     />
   </div>
 </template>
@@ -127,29 +153,13 @@
 <script lang="ts">
 import Vue from 'vue';
 import { Permissions } from '@/global';
+import { GroupMember, LocalGroup } from '@/openapi-types';
 import SubViewTitle from '@/components/ui/SubViewTitle.vue';
 import AddMembersDialog from './AddMembersDialog.vue';
 import ConfirmDialog from '@/components/ui/ConfirmDialog.vue';
 import LargeButton from '@/components/ui/LargeButton.vue';
 import * as api from '@/util/api';
-
-interface IGroupMember {
-  id: string;
-  name: string;
-  created_at: string;
-}
-
-interface ILocalGroup {
-  id: number;
-  code: string;
-  description: string;
-  member_count: number;
-  updated_at: string;
-  members: IGroupMember[];
-}
-
-type GroupMember = undefined | IGroupMember;
-type LocalGroup = undefined | ILocalGroup;
+import { encodePathParameter } from '@/util/api';
 
 export default Vue.extend({
   components: {
@@ -173,9 +183,9 @@ export default Vue.extend({
       confirmGroup: false,
       confirmMember: false,
       confirmAllMembers: false,
-      selectedMember: undefined as GroupMember,
-      description: undefined,
-      group: undefined as LocalGroup,
+      selectedMember: undefined as GroupMember | undefined,
+      description: undefined as string | undefined,
+      group: undefined as LocalGroup | undefined,
       groupCode: '',
       addMembersDialogVisible: false,
     };
@@ -197,9 +207,7 @@ export default Vue.extend({
     },
 
     hasMembers(): boolean {
-      const tempGroup: any = this.group;
-
-      if (tempGroup && tempGroup.members && tempGroup.members.length > 0) {
+      if (this.group && this.group.members && this.group.members.length > 0) {
         return true;
       }
       return false;
@@ -212,9 +220,12 @@ export default Vue.extend({
 
     saveDescription(): void {
       api
-        .patch(`/local-groups/${this.groupId}`, {
-          description: this.description,
-        })
+        .patch<LocalGroup>(
+          `/local-groups/${encodePathParameter(this.groupId)}`,
+          {
+            description: this.description,
+          },
+        )
         .then((res) => {
           this.$store.dispatch('showSuccess', 'localGroup.descSaved');
           this.group = res.data;
@@ -228,7 +239,7 @@ export default Vue.extend({
 
     fetchData(clientId: string, groupId: number | string): void {
       api
-        .get(`/local-groups/${groupId}`)
+        .get<LocalGroup>(`/local-groups/${encodePathParameter(groupId)}`)
         .then((res) => {
           this.group = res.data;
           this.groupCode = res.data.code;
@@ -247,10 +258,10 @@ export default Vue.extend({
       this.addMembersDialogVisible = false;
 
       api
-        .post(`/local-groups/${this.groupId}/members`, {
+        .post(`/local-groups/${encodePathParameter(this.groupId)}/members`, {
           items: selectedIds,
         })
-        .then((res) => {
+        .then(() => {
           this.fetchData(this.clientId, this.groupId);
         })
         .catch((error) => {
@@ -267,24 +278,27 @@ export default Vue.extend({
     },
 
     doRemoveAllMembers(): void {
-      const ids: string[] = [];
-      const tempGroup: LocalGroup = this.group;
-
-      if (tempGroup) {
-        tempGroup.members.forEach((member: IGroupMember) => {
-          ids.push(member.id);
-        });
-        this.removeArrayOfMembers(ids);
+      if (!this.group?.members) {
+        return;
       }
+      const ids: string[] = [];
+
+      this.group.members.forEach((member: GroupMember) => {
+        ids.push(member.id);
+      });
+      this.removeArrayOfMembers(ids);
 
       this.confirmAllMembers = false;
     },
 
-    removeMember(member: IGroupMember): void {
+    removeMember(member: GroupMember): void {
       this.confirmMember = true;
       this.selectedMember = member as GroupMember;
     },
     doRemoveMember() {
+      if (!this.selectedMember) {
+        return;
+      }
       const member: GroupMember = this.selectedMember;
 
       if (member && member.id) {
@@ -297,9 +311,12 @@ export default Vue.extend({
 
     removeArrayOfMembers(members: string[]) {
       api
-        .post(`/local-groups/${this.groupId}/members/delete`, {
-          items: members,
-        })
+        .post(
+          `/local-groups/${encodePathParameter(this.groupId)}/members/delete`,
+          {
+            items: members,
+          },
+        )
         .catch((error) => {
           this.$store.dispatch('showError', error);
         })
@@ -315,7 +332,7 @@ export default Vue.extend({
       this.confirmGroup = false;
 
       api
-        .remove(`/local-groups/${this.groupId}`)
+        .remove(`/local-groups/${encodePathParameter(this.groupId)}`)
         .then(() => {
           this.$store.dispatch('showSuccess', 'localGroup.groupDeleted');
           this.$router.go(-1);

@@ -1,5 +1,6 @@
 /**
  * The MIT License
+ * Copyright (c) 2019- Nordic Institute for Interoperability Solutions (NIIS)
  * Copyright (c) 2018 Estonian Information System Authority (RIA),
  * Nordic Institute for Interoperability Solutions (NIIS), Population Register Centre (VRK)
  * Copyright (c) 2015-2017 Estonian Information System Authority (RIA), Population Register Centre (VRK)
@@ -27,15 +28,10 @@ package org.niis.xroad.restapi.repository;
 import ee.ria.xroad.common.identifier.ClientId;
 import ee.ria.xroad.common.identifier.XRoadObjectType;
 
-import lombok.extern.slf4j.Slf4j;
 import org.junit.Test;
-import org.junit.runner.RunWith;
+import org.niis.xroad.restapi.config.AbstractFacadeMockingTestContext;
 import org.niis.xroad.restapi.util.TestUtils;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.jdbc.AutoConfigureTestDatabase;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.test.context.junit4.SpringRunner;
-import org.springframework.transaction.annotation.Transactional;
 
 import static junit.framework.TestCase.assertNull;
 import static org.junit.Assert.assertEquals;
@@ -44,15 +40,10 @@ import static org.junit.Assert.assertNotNull;
 /**
  * test IdentifierRepository
  */
-@RunWith(SpringRunner.class)
-@SpringBootTest
-@AutoConfigureTestDatabase
-@Slf4j
-@Transactional
-public class IdentifierRepositoryIntegrationTest {
+public class IdentifierRepositoryIntegrationTest extends AbstractFacadeMockingTestContext {
 
     @Autowired
-    private IdentifierRepository identifierRepository;
+    IdentifierRepository identifierRepository;
 
     @Test
     public void getClientId() {

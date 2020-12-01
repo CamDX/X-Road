@@ -1,5 +1,6 @@
 /**
  * The MIT License
+ * Copyright (c) 2019- Nordic Institute for Interoperability Solutions (NIIS)
  * Copyright (c) 2018 Estonian Information System Authority (RIA),
  * Nordic Institute for Interoperability Solutions (NIIS), Population Register Centre (VRK)
  * Copyright (c) 2015-2017 Estonian Information System Authority (RIA), Population Register Centre (VRK)
@@ -32,28 +33,18 @@ import ee.ria.xroad.common.identifier.ClientId;
 import ee.ria.xroad.common.util.CryptoUtils;
 import ee.ria.xroad.signer.protocol.dto.CertificateInfo;
 
-import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.io.IOUtils;
 import org.bouncycastle.asn1.x509.CRLReason;
 import org.bouncycastle.cert.ocsp.RevokedStatus;
 import org.bouncycastle.cert.ocsp.UnknownStatus;
 import org.junit.Before;
 import org.junit.Test;
-import org.junit.runner.RunWith;
-import org.niis.xroad.restapi.cache.CurrentSecurityServerSignCertificates;
 import org.niis.xroad.restapi.exceptions.DeviationAwareRuntimeException;
-import org.niis.xroad.restapi.facade.GlobalConfFacade;
 import org.niis.xroad.restapi.util.CertificateTestUtils;
 import org.niis.xroad.restapi.util.TestUtils;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.jdbc.AutoConfigureTestDatabase;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.security.test.context.support.WithMockUser;
-import org.springframework.test.context.junit4.SpringRunner;
 import org.springframework.test.jdbc.JdbcTestUtils;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.security.cert.CertificateException;
 import java.util.ArrayList;
@@ -80,37 +71,25 @@ import static org.mockito.Mockito.when;
 /**
  * test client service
  */
-@RunWith(SpringRunner.class)
-@SpringBootTest
-@AutoConfigureTestDatabase
-@Slf4j
-@Transactional
-@WithMockUser
-public class ClientServiceIntegrationTest {
+public class ClientServiceIntegrationTest extends AbstractServiceIntegrationTestContext {
 
     @Autowired
-    private ClientService clientService;
+    ClientService clientService;
 
     @Autowired
-    private JdbcTemplate jdbcTemplate;
+    JdbcTemplate jdbcTemplate;
 
     private byte[] pemBytes;
     private byte[] derBytes;
     private byte[] sqlFileBytes;
-
-    @MockBean
-    private GlobalConfFacade globalConfFacade;
 
     private ClientId existingSavedClientId = ClientId.create("FI", "GOV", "M2", "SS6");
     private ClientId existingRegisteredClientId = ClientId.create("FI", "GOV", "M1", "SS1");
     private ClientId ownerClientId = ClientId.create("FI", "GOV", "M1", null);
     private ClientId newOwnerClientId = ClientId.create("FI", "GOV", "M2", null);
 
-    @MockBean
-    private ManagementRequestSenderService managementRequestSenderService;
-
-    @MockBean
-    private CurrentSecurityServerSignCertificates currentSecurityServerSignCertificates;
+    private static final List<String> MEMBER_CLASSES = Arrays.asList(TestUtils.MEMBER_CLASS_GOV,
+            TestUtils.MEMBER_CLASS_PRO);
 
     @Before
     public void setup() throws Exception {
@@ -154,6 +133,7 @@ public class ClientServiceIntegrationTest {
         });
         when(managementRequestSenderService.sendClientRegisterRequest(any())).thenReturn(1);
         when(globalConfFacade.getInstanceIdentifier()).thenReturn(TestUtils.INSTANCE_FI);
+        when(globalConfService.getMemberClassesForThisInstance()).thenReturn(new HashSet<>(MEMBER_CLASSES));
         when(globalConfFacade.isSecurityServerClient(any(), any())).thenAnswer(invocation -> {
             // mock isSecurityServerClient: it is a client, if it exists in DB / getAllLocalClients
             ClientId clientId = (ClientId) invocation.getArguments()[0];
@@ -183,11 +163,15 @@ public class ClientServiceIntegrationTest {
                 new CertificateTestUtils.CertificateInfoBuilder();
 
         // Create cert with good ocsp response status
+        // This certificate is valid for all subsystems owned by the member "FI/GOV/M1".
         ClientId clientId1 = ClientId.create("FI", "GOV", "M1", "SS1");
         certificateInfoBuilder.clientId(clientId1);
         CertificateInfo cert1 = certificateInfoBuilder.build();
 
         // Create cert with revoked ocsp response status
+        // N.B. This cert is ignored, and SS2 is considered to have valid sign cert since SS1 and SS2 have the
+        // same owner, and sign certs are issued to members and not subsystems. Therefore, the certificate issued
+        // to SS1 applies to SS2 too.
         ClientId clientId2 = ClientId.create("FI", "GOV", "M1", "SS2");
         certificateInfoBuilder.clientId(clientId2).ocspStatus(new RevokedStatus(new Date(), CRLReason.certificateHold));
         CertificateInfo cert2 = certificateInfoBuilder.build();
@@ -198,6 +182,7 @@ public class ClientServiceIntegrationTest {
         CertificateInfo cert3 = certificateInfoBuilder.build();
 
         certificateInfos.addAll(Arrays.asList(cert2, cert3, cert1));
+
         return certificateInfos;
     }
 
@@ -281,7 +266,7 @@ public class ClientServiceIntegrationTest {
     private void addAndDeleteLocalClient(ClientId clientId, String status) throws ActionNotPossibleException,
             ClientService.CannotDeleteOwnerException, ClientNotFoundException,
             ClientService.AdditionalMemberAlreadyExistsException, UnhandledWarningsException,
-            ClientService.ClientAlreadyExistsException {
+            ClientService.ClientAlreadyExistsException, ClientService.InvalidMemberClassException {
         ClientType addedClient = clientService.addLocalClient(clientId.getMemberClass(),
                 clientId.getMemberCode(), clientId.getSubsystemCode(),
                 IsAuthentication.SSLAUTH, true);
@@ -298,7 +283,6 @@ public class ClientServiceIntegrationTest {
         client.setClientStatus(STATUS_SAVED);
         clientService.deleteLocalClient(clientId);
     }
-
 
     @Test
     public void deleteLocalClientNotPossible() throws Exception {
@@ -320,7 +304,7 @@ public class ClientServiceIntegrationTest {
         List<String> allStatuses = Arrays.asList(STATUS_SAVED, STATUS_REGINPROG, STATUS_REGISTERED,
                 STATUS_DELINPROG, STATUS_GLOBALERR);
         int created = 0;
-        for (String status: allStatuses) {
+        for (String status : allStatuses) {
             created++;
             ClientId memberId = TestUtils.getClientId("FI:GOV:UNREGISTERED-NEW-MEMBER" + status);
             ClientId subsystemId = TestUtils.getClientId("FI:GOV:UNREGISTERED-NEW-MEMBER" + status
@@ -434,6 +418,27 @@ public class ClientServiceIntegrationTest {
                     IsAuthentication.SSLAUTH, false);
             fail("should have thrown ClientService.ClientAlreadyExistsException");
         } catch (ClientService.ClientAlreadyExistsException expected) {
+        }
+    }
+
+    @Test
+    public void addLocalClientWithInvalidMemberClass() throws Exception {
+        // try member, FI:INVALID:M1
+        try {
+            ClientId id = TestUtils.getClientId("FI:INVALID:M1");
+            clientService.addLocalClient(id.getMemberClass(), id.getMemberCode(), id.getSubsystemCode(),
+                    IsAuthentication.SSLAUTH, false);
+            fail("should have thrown ClientService.InvalidMemberClassException");
+        } catch (ClientService.InvalidMemberClassException expected) {
+        }
+
+        // and subsystem, FI:INVALID:M1:SS1
+        try {
+            ClientId id = TestUtils.getClientId("FI:INVALID:M1:SS1");
+            clientService.addLocalClient(id.getMemberClass(), id.getMemberCode(), id.getSubsystemCode(),
+                    IsAuthentication.SSLAUTH, false);
+            fail("should have thrown ClientService.InvalidMemberClassException");
+        } catch (ClientService.InvalidMemberClassException expected) {
         }
     }
 
@@ -620,7 +625,7 @@ public class ClientServiceIntegrationTest {
         ClientId id = TestUtils.getM1Ss1ClientId();
         ClientType clientType = clientService.getLocalClient(id);
         assertEquals("SSLNOAUTH", clientType.getIsAuthentication());
-        assertEquals(2, clientType.getLocalGroup().size());
+        assertEquals(3, clientType.getLocalGroup().size());
 
         try {
             clientService.updateConnectionType(id, "FUBAR");
@@ -631,7 +636,8 @@ public class ClientServiceIntegrationTest {
         clientService.updateConnectionType(id, "NOSSL");
         clientType = clientService.getLocalClient(id);
         assertEquals("NOSSL", clientType.getIsAuthentication());
-        assertEquals(2, clientType.getLocalGroup().size());
+        assertEquals(3, clientType.getLocalGroup().size());
+
     }
 
     @Test
@@ -739,7 +745,7 @@ public class ClientServiceIntegrationTest {
     public void findLocalClientsByInstanceIncludeMembers() {
         List<ClientType> clients = clientService.findLocalClients(null, TestUtils.INSTANCE_FI, null,
                 null, null, true, false);
-        assertEquals(5, clients.size());
+        assertEquals(6, clients.size());
     }
 
     @Test
@@ -776,7 +782,7 @@ public class ClientServiceIntegrationTest {
     public void findLocalClientsByInstanceExcludeMembers() {
         List<ClientType> clients = clientService.findLocalClients(null, TestUtils.INSTANCE_FI, null,
                 null, null, false, false);
-        assertEquals(4, clients.size());
+        assertEquals(5, clients.size());
     }
 
     @Test
@@ -805,10 +811,17 @@ public class ClientServiceIntegrationTest {
     public void findLocalClientsByOnlyLocalClientsWithValidSignCert() throws Exception {
         when(currentSecurityServerSignCertificates.getSignCertificateInfos()).thenReturn(createCertificateInfoList());
         List<ClientType> clients = clientService.findLocalClients(null, null, null, null, null, false, true);
-        assertEquals(1, clients.size());
+        assertEquals(2, clients.size());
         assertTrue("GOV".equals(clients.get(0).getIdentifier().getMemberClass()));
         assertTrue("M1".equals(clients.get(0).getIdentifier().getMemberCode()));
         assertTrue("SS1".equals(clients.get(0).getIdentifier().getSubsystemCode()));
+        // SS2 has an invalid cert in the createCertificateInfoList. Since sign
+        // certificates are issued to members (not to subsystems), and M1 has a valid sign cert created
+        // for SS1, the certificate applies to SS2 too, because both SS1 and SS2 belong to the
+        // same member.
+        assertTrue("GOV".equals(clients.get(1).getIdentifier().getMemberClass()));
+        assertTrue("M1".equals(clients.get(1).getIdentifier().getMemberCode()));
+        assertTrue("SS2".equals(clients.get(1).getIdentifier().getSubsystemCode()));
     }
 
     /* Test GLOBAL client search */
@@ -893,6 +906,8 @@ public class ClientServiceIntegrationTest {
                 TestUtils.MEMBER_CLASS_GOV, TestUtils.MEMBER_CODE_M1));
         expected.add(ClientId.create(TestUtils.INSTANCE_FI,
                 TestUtils.MEMBER_CLASS_GOV, TestUtils.MEMBER_CODE_M2));
+        expected.add(ClientId.create("DUMMY", "PRO", "M2"));
+        expected.add(ClientId.create("FI", "DUMMY", "M2"));
         Set<ClientId> result = clientService.getLocalClientMemberIds();
         assertEquals(expected, result);
     }
@@ -909,6 +924,16 @@ public class ClientServiceIntegrationTest {
     @Test(expected = ClientNotFoundException.class)
     public void registerNonExistingClient() throws Exception {
         clientService.registerClient(ClientId.create("non", "existing", "client", null));
+    }
+
+    @Test(expected = ClientService.InvalidInstanceIdentifierException.class)
+    public void registerClientWithInvalidInstanceIdentifier() throws Exception {
+        clientService.registerClient(ClientId.create("DUMMY", "PRO", "M2", "SS6"));
+    }
+
+    @Test(expected = ClientService.InvalidMemberClassException.class)
+    public void registerClientWithInvalidMemberClass() throws Exception {
+        clientService.registerClient(ClientId.create("FI", "DUMMY", "M2", "SS6"));
     }
 
     @Test(expected = CodedException.class)

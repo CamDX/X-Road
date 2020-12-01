@@ -1,5 +1,6 @@
 /**
  * The MIT License
+ * Copyright (c) 2019- Nordic Institute for Interoperability Solutions (NIIS)
  * Copyright (c) 2018 Estonian Information System Authority (RIA),
  * Nordic Institute for Interoperability Solutions (NIIS), Population Register Centre (VRK)
  * Copyright (c) 2015-2017 Estonian Information System Authority (RIA), Population Register Centre (VRK)
@@ -28,28 +29,19 @@ import ee.ria.xroad.common.CodedException;
 import ee.ria.xroad.signer.protocol.dto.KeyInfo;
 import ee.ria.xroad.signer.protocol.dto.TokenInfo;
 
-import lombok.extern.slf4j.Slf4j;
 import org.junit.Before;
 import org.junit.Test;
-import org.junit.runner.RunWith;
-import org.niis.xroad.restapi.facade.SignerProxyFacade;
 import org.niis.xroad.restapi.openapi.model.Key;
 import org.niis.xroad.restapi.openapi.model.KeyLabel;
 import org.niis.xroad.restapi.openapi.model.Token;
 import org.niis.xroad.restapi.openapi.model.TokenStatus;
 import org.niis.xroad.restapi.service.TokenNotFoundException;
-import org.niis.xroad.restapi.service.TokenService;
 import org.niis.xroad.restapi.util.TokenTestUtils;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.jdbc.AutoConfigureTestDatabase;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.test.context.support.WithMockUser;
-import org.springframework.test.context.junit4.SpringRunner;
 import org.springframework.test.util.ReflectionTestUtils;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Arrays;
 import java.util.List;
@@ -61,32 +53,22 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.fail;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doAnswer;
-import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.doReturn;
 
 /**
  * test tokens api
  */
-@RunWith(SpringRunner.class)
-@SpringBootTest
-@AutoConfigureTestDatabase
-@Transactional
-@Slf4j
-public class TokensApiControllerTest {
+public class TokensApiControllerTest extends AbstractApiControllerTestContext {
+
+    @Autowired
+    TokensApiController tokensApiController;
 
     private static final String TOKEN_NOT_FOUND_TOKEN_ID = "token-404";
     private static final String GOOD_TOKEN_ID = "token-which-exists";
-    private static final String NOT_ACTIVE_TOKEN_ID = "token-not-active";
-    private static final String NOT_ACTIVE_TOKEN_KEY_ID = "token-not-active-key";
     private static final String KEY_LABEL = "key-label";
 
-    @MockBean
-    private TokenService tokenService;
-    @MockBean
-    private SignerProxyFacade signerProxyFacade;
-
-    @Autowired
-    private TokensApiController tokensApiController;
-
+    public static final String NOT_ACTIVE_TOKEN_ID = "token-not-active";
+    public static final String NOT_ACTIVE_TOKEN_KEY_ID = "token-not-active-key";
 
     private List<TokenInfo> allTokens;
 
@@ -107,7 +89,7 @@ public class TokensApiControllerTest {
                 .build();
         allTokens = Arrays.asList(new TokenInfo[] {activeTokenInfo, inactiveTokenInfo});
 
-        when(tokenService.getAllTokens()).thenReturn(allTokens);
+        doReturn(allTokens).when(tokenService).getAllTokens();
 
         doAnswer(invocation -> {
             Object[] args = invocation.getArguments();

@@ -1,5 +1,6 @@
 /**
  * The MIT License
+ * Copyright (c) 2019- Nordic Institute for Interoperability Solutions (NIIS)
  * Copyright (c) 2018 Estonian Information System Authority (RIA),
  * Nordic Institute for Interoperability Solutions (NIIS), Population Register Centre (VRK)
  * Copyright (c) 2015-2017 Estonian Information System Authority (RIA), Population Register Centre (VRK)
@@ -64,9 +65,6 @@ public final class GlobalConf {
         }
     }
 
-    private static final ThreadLocal<GlobalConfProvider> THREAD_LOCAL =
-            new InheritableThreadLocal<>();
-
     private static volatile GlobalConfProvider instance;
 
     private GlobalConf() {
@@ -76,32 +74,14 @@ public final class GlobalConf {
      * Returns the singleton instance of the configuration.
      */
     static GlobalConfProvider getInstance() {
-        if (THREAD_LOCAL.get() != null) {
-            return THREAD_LOCAL.get();
-        }
-
         if (instance == null) {
-            instance = instanceFactory.createInstance(true);
+            synchronized (GlobalConfProvider.class) {
+                if (instance == null) {
+                    instance = instanceFactory.createInstance(true);
+                }
+            }
         }
-
         return instance;
-    }
-
-    /**
-     * Initializes current instance of conf for the calling thread.
-     * Example usage: calling this method in RequestProcessor to have
-     * a copy of current config for the current message.
-     */
-    public static void initForCurrentThread() {
-        log.trace("initForCurrentThread()");
-
-        if (instance == null) {
-            instance = instanceFactory.createInstance(false);
-        }
-
-        reloadIfChanged();
-
-        THREAD_LOCAL.set(instance);
     }
 
     /**
@@ -236,7 +216,7 @@ public final class GlobalConf {
 
     /**
      * @param instanceIdentifiers the instance identifiers
-     * @return members and subsystems of a given instance or all members if
+     * @return members and subsystems of a given instance, or all members and subsystems if
      * no instance identifiers are specified
      */
     public static List<MemberInfo> getMembers(String... instanceIdentifiers) {

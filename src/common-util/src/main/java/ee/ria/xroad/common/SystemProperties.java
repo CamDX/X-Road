@@ -1,5 +1,6 @@
 /**
  * The MIT License
+ * Copyright (c) 2019- Nordic Institute for Interoperability Solutions (NIIS)
  * Copyright (c) 2018 Estonian Information System Authority (RIA),
  * Nordic Institute for Interoperability Solutions (NIIS), Population Register Centre (VRK)
  * Copyright (c) 2015-2017 Estonian Information System Authority (RIA), Population Register Centre (VRK)
@@ -77,7 +78,19 @@ public final class SystemProperties {
     public static final String PROXY_UI_API_SSL_PROPERTIES =
             PREFIX + "proxy-ui-api.ssl-properties";
 
+    /** Default whitelist for Proxy UI API's key management API (allow only localhost access, ipv4 and ipv6) */
+    public static final String DEFAULT_KEY_MANAGEMENT_API_WHITELIST = "127.0.0.0/8, ::1";
 
+    /** Default whitelist for Proxy UI API's regular APIs (allow all) */
+    public static final String DEFAULT_REGULAR_API_WHITELIST = "0.0.0.0/0, ::/0";
+
+    /** Property name of the whitelist for Proxy UI API's key management API */
+    public static final String PROXY_UI_API_KEY_MANAGEMENT_API_WHITELIST =
+            PREFIX + "proxy-ui-api.key-management-api-whitelist";
+
+    /** Property name of the whitelist for Proxy UI API's regular APIs */
+    public static final String PROXY_UI_API_REGULAR_API_WHITELIST =
+            PREFIX + "proxy-ui-api.regular-api-whitelist";
 
     // Proxy ------------------------------------------------------------------
 
@@ -258,6 +271,9 @@ public final class SystemProperties {
 
     private static final String PROXY_ACTORSYSTEM_PORT = PREFIX + "proxy.actorsystem-port";
 
+    private static final String ENFORCE_CLIENT_IS_CERT_VALIDITY_PERIOD_CHECK =
+            PREFIX + "proxy.enforce-client-is-cert-validity-period-check";
+
     private static final String DEFAULT_CENTER_TRUSTED_ANCHORS_ALLOWED = "false";
 
     private static final String DEFAULT_CENTER_AUTO_APPROVE_AUTH_CERT_REG_REQUESTS = "false";
@@ -304,6 +320,8 @@ public final class SystemProperties {
 
     private static final String DEFAULT_CLIENTPROXY_POOL_VALIDATE_CONNECTIONS_AFTER_INACTIVITY_OF_MS = "2000";
 
+    private static final String DEFAULT_ENFORCE_CLIENT_IS_CERT_VALIDITY_PERIOD_CHECK = "false";
+
     /**
      * The default value of the on/off switch for a group of settings that affect whether or not pooled connections
      * for the ClientProxy can be actually reused
@@ -320,7 +338,6 @@ public final class SystemProperties {
             PREFIX + "proxy.ocsp-verifier-cache-period";
 
     private static final int OCSP_VERIFIER_CACHE_PERIOD_MAX = 180;
-
 
     // Signer -----------------------------------------------------------------
 
@@ -371,6 +388,16 @@ public final class SystemProperties {
 
     public static final String DEFAULT_SIGNER_MODULE_MANAGER_UPDATE_INTERVAL = "60";
 
+    public static final String SIGNER_CLIENT_HEARTBEAT_INTERVAL =
+            PREFIX + "signer.client.heartbeat-interval";
+
+    private static final String DEFAULT_SIGNER_CLIENT_HEARTBEAT_INTERVAL = "1";
+
+    public static final String SIGNER_CLIENT_FAILURE_THRESHOLD =
+            PREFIX + "signer.client.failure-threshold";
+
+    private static final String DEFAULT_SIGNER_CLIENT_FAILURE_THRESHOLD = "7";
+
     // AntiDos ----------------------------------------------------------------
 
     /** Property name of the AntiDos on/off switch */
@@ -400,7 +427,6 @@ public final class SystemProperties {
 
     public static final String CONFIGURATION_CLIENT_ADMIN_PORT =
             PREFIX + "configuration-client.admin-port";
-
 
     public static final String CONFIGURATION_CLIENT_UPDATE_INTERVAL_SECONDS =
             PREFIX + "configuration-client.update-interval";
@@ -471,14 +497,14 @@ public final class SystemProperties {
 
     /** Property name of the WSDL validator command. */
     public static final String WSDL_VALIDATOR_COMMAND =
-            PREFIX + "proxy-ui.wsdl-validator-command";
+            PREFIX + "proxy-ui-api.wsdl-validator-command";
 
     /**
      * Property name of the signature digest algorithm ID used for generating authentication certificate
      * registration request.
      */
     private static final String PROXYUI_AUTH_CERT_REG_SIGNATURE_DIGEST_ALGORITHM_ID =
-            PREFIX + "proxy-ui.auth-cert-reg-signature-digest-algorithm-id";
+            PREFIX + "proxy-ui-api.auth-cert-reg-signature-digest-algorithm-id";
 
     // Proxy & Central monitor agent ------------------------------------------
 
@@ -605,8 +631,8 @@ public final class SystemProperties {
     public static final String CONF_FILE_NODE =
             getConfPath() + "conf.d/node.ini";
 
-    public static final String CONF_FILE_PROXY_UI =
-            getConfPath() + "conf.d/proxy-ui.ini";
+    public static final String CONF_FILE_PROXY_UI_API =
+            getConfPath() + "conf.d/proxy-ui-api.ini";
 
     public static final String CONF_FILE_SIGNER =
             getConfPath() + "conf.d/signer.ini";
@@ -628,7 +654,6 @@ public final class SystemProperties {
 
     public static final String CONF_FILE_ADDON_PATH =
             getConfPath() + "conf.d/addons/";
-
 
     // --------------------------------------------------------------------- //
 
@@ -676,6 +701,24 @@ public final class SystemProperties {
     public static String getSslPropertiesFile() {
         return System.getProperty(PROXY_UI_API_SSL_PROPERTIES,
                 getConfPath() + DefaultFilepaths.PROXY_UI_API_SSL_PROPERTIES);
+    }
+
+    /**
+     * TO DO: not correct, fix
+     *
+     * @return whitelist for Proxy UI API's key management API, "127.0.0.0/8, ::1" (localhost) by default
+     */
+    public static String getKeyManagementApiWhitelist() {
+        return System.getProperty(PROXY_UI_API_KEY_MANAGEMENT_API_WHITELIST,
+                DEFAULT_KEY_MANAGEMENT_API_WHITELIST);
+    }
+
+    /**
+     * @return whitelist for Proxy UI API's regular APIs, "0.0.0.0/0, ::/0" (allow all) by default
+     */
+    public static String getRegularApiWhitelist() {
+        return System.getProperty(PROXY_UI_API_REGULAR_API_WHITELIST,
+                DEFAULT_REGULAR_API_WHITELIST);
     }
 
     /**
@@ -740,7 +783,6 @@ public final class SystemProperties {
     public static String getWsdlValidatorCommand() {
         return System.getProperty(WSDL_VALIDATOR_COMMAND, null);
     }
-
 
     /**
      * @return signature digest algorithm ID used for generating authentication certificate registration request,
@@ -890,6 +932,23 @@ public final class SystemProperties {
     }
 
     /**
+     * @return the signer client heartbeat interval in seconds
+     */
+    public static int getSignerClientHeartbeatInterval() {
+        return Integer.parseInt(
+                System.getProperty(SIGNER_CLIENT_HEARTBEAT_INTERVAL, DEFAULT_SIGNER_CLIENT_HEARTBEAT_INTERVAL));
+    }
+
+    /**
+     * @return the signer client failure threshold (how many lost heartbeat messages until signer is considered
+     * unreachable).
+     */
+    public static int getSignerClientFailureThreshold() {
+        return Integer.parseInt(
+                System.getProperty(SIGNER_CLIENT_FAILURE_THRESHOLD, DEFAULT_SIGNER_CLIENT_FAILURE_THRESHOLD));
+    }
+
+    /**
      * @return the HTTP port on which the configuration client is listening, '5665' by default.
      */
     public static int getConfigurationClientPort() {
@@ -904,7 +963,6 @@ public final class SystemProperties {
         return Integer.parseInt(System.getProperty(CONFIGURATION_CLIENT_ADMIN_PORT,
                 Integer.toString(PortNumbers.CONFIGURATION_CLIENT_ADMIN_PORT)));
     }
-
 
     /**
      * @return the update interval in seconds at which configuration client
@@ -1155,7 +1213,6 @@ public final class SystemProperties {
     public static int getEnvMonitorCertificateInfoSensorInterval() {
         return Integer.parseInt(System.getProperty(ENV_MONITOR_CERTIFICATE_INFO_SENSOR_INTERVAL, ONE_DAY_AS_SECONDS));
     }
-
 
     /**
      * @return path to the file containing network statistics,
@@ -1516,5 +1573,13 @@ public final class SystemProperties {
         if (version > current || version < 1) {
             throw new IllegalArgumentException("Illegal minimum global configuration version in system parameters");
         }
+    }
+
+    /**
+     * @return Whether to throw an exception about expired or not yet valid certificates, 'false' by default..
+     */
+    public static boolean isClientIsCertValidityPeriodCheckEnforced() {
+        return "true".equalsIgnoreCase(System.getProperty(ENFORCE_CLIENT_IS_CERT_VALIDITY_PERIOD_CHECK,
+                DEFAULT_ENFORCE_CLIENT_IS_CERT_VALIDITY_PERIOD_CHECK));
     }
 }

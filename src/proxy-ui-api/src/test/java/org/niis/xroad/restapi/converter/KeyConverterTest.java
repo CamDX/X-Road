@@ -1,5 +1,6 @@
 /**
  * The MIT License
+ * Copyright (c) 2019- Nordic Institute for Interoperability Solutions (NIIS)
  * Copyright (c) 2018 Estonian Information System Authority (RIA),
  * Nordic Institute for Interoperability Solutions (NIIS), Population Register Centre (VRK)
  * Copyright (c) 2015-2017 Estonian Information System Authority (RIA), Population Register Centre (VRK)
@@ -31,14 +32,10 @@ import ee.ria.xroad.signer.protocol.dto.KeyInfo;
 import ee.ria.xroad.signer.protocol.dto.KeyUsageInfo;
 
 import org.junit.Test;
-import org.junit.runner.RunWith;
 import org.niis.xroad.restapi.openapi.model.Key;
 import org.niis.xroad.restapi.openapi.model.KeyUsageType;
 import org.niis.xroad.restapi.util.CertificateTestUtils.CertificateInfoBuilder;
 import org.niis.xroad.restapi.util.TokenTestUtils;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.test.context.junit4.SpringRunner;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -46,13 +43,7 @@ import java.util.List;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 
-@RunWith(SpringRunner.class)
-@SpringBootTest
-public class KeyConverterTest {
-
-    @Autowired
-    private KeyConverter keyConverter;
-
+public class KeyConverterTest extends AbstractConverterTestContext {
 
     @Test
     public void convert() throws Exception {

@@ -1,5 +1,6 @@
 /**
  * The MIT License
+ * Copyright (c) 2019- Nordic Institute for Interoperability Solutions (NIIS)
  * Copyright (c) 2018 Estonian Information System Authority (RIA),
  * Nordic Institute for Interoperability Solutions (NIIS), Population Register Centre (VRK)
  * Copyright (c) 2015-2017 Estonian Information System Authority (RIA), Population Register Centre (VRK)
@@ -26,14 +27,13 @@ package org.niis.xroad.restapi.service;
 
 import org.niis.xroad.restapi.exceptions.ErrorDeviation;
 
-public class EndpointNotFoundException extends NotFoundException {
-    public static final String ERROR_ENDPOINT_NOT_FOUND = "endpoint_not_found";
-    public static final String ERROR_BASE_ENDPOINT_NOT_FOUND = "base_endpoint_not_found";
+import static org.niis.xroad.restapi.exceptions.DeviationCodes.ERROR_ENDPOINT_NOT_FOUND;
 
+public class EndpointNotFoundException extends NotFoundException {
     private static final String MESSAGE = "Endpoint not found with id: %s";
 
     public EndpointNotFoundException(String id) {
-        super(String.format(MESSAGE, id), new ErrorDeviation(ERROR_ENDPOINT_NOT_FOUND, id));
+        super(String.format(MESSAGE, id), new ErrorDeviation(ERROR_ENDPOINT_NOT_FOUND));
     }
 
     public EndpointNotFoundException(String errorCode, String msg) {

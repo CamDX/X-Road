@@ -1,5 +1,6 @@
 /**
  * The MIT License
+ * Copyright (c) 2019- Nordic Institute for Interoperability Solutions (NIIS)
  * Copyright (c) 2018 Estonian Information System Authority (RIA),
  * Nordic Institute for Interoperability Solutions (NIIS), Population Register Centre (VRK)
  * Copyright (c) 2015-2017 Estonian Information System Authority (RIA), Population Register Centre (VRK)
@@ -49,6 +50,8 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 
+import static org.niis.xroad.restapi.exceptions.DeviationCodes.ERROR_OPENAPI_PARSING;
+
 /**
  * Parser for OpenAPI descriptions
  */
@@ -75,7 +78,14 @@ public class OpenApiParser {
         final ParseOptions options = new ParseOptions();
         options.setResolve(false);
 
-        final SwaggerParseResult result = new OpenAPIV3Parser().readContents(readOpenAPIDescription(openApiUrl),
+        String openApiDescription;
+        try {
+            openApiDescription = readOpenAPIDescription(openApiUrl);
+        } catch (Exception e) {
+            log.error("Reading OpenAPI description from {} failed", openApiUrl, e);
+            throw e;
+        }
+        final SwaggerParseResult result = new OpenAPIV3Parser().readContents(openApiDescription,
                 null, options);
         validate(result, openApiUrl);
 
@@ -186,9 +196,6 @@ public class OpenApiParser {
      * OpenAPI Parsing Exception
      */
     public static class ParsingException extends ServiceException {
-
-        public static final String ERROR_OPENAPI_PARSING = "openapi_parsing_error";
-
         public ParsingException(String message) {
             super(new ErrorDeviation(ERROR_OPENAPI_PARSING, message));
         }

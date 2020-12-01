@@ -16,7 +16,7 @@ Requires(post):     /usr/sbin/semanage, /usr/sbin/setsebool
 Requires(preun):    systemd
 Requires(postun):   systemd
 Requires:           net-tools, tar
-Requires:           xroad-base = %version-%release, xroad-nginx = %version-%release, xroad-confclient = %version-%release, xroad-signer = %version-%release, xroad-jetty9 = %version-%release, rsyslog, postgresql-server, postgresql-contrib
+Requires:           xroad-base = %version-%release, xroad-confclient = %version-%release, xroad-signer = %version-%release, rsyslog, postgresql-server, postgresql-contrib
 
 %define src %{_topdir}/..
 
@@ -47,35 +47,26 @@ mkdir -p %{buildroot}/etc/logrotate.d
 mkdir -p %{buildroot}/usr/share/doc/%{name}
 mkdir -p %{buildroot}/etc/xroad/backup.d
 mkdir -p %{buildroot}/etc/cron.d
-mkdir -p %{buildroot}/etc/xroad/nginx
-mkdir -p %{buildroot}/etc/nginx/conf.d
 
 cp -p %{_sourcedir}/proxy/xroad-proxy-setup.sh %{buildroot}/usr/share/xroad/scripts/
 cp -p %{_sourcedir}/proxy/xroad-initdb.sh %{buildroot}/usr/share/xroad/scripts/
-cp -p %{_sourcedir}/proxy/xroad-proxy-port-redirect.sh %{buildroot}/usr/share/xroad/scripts/
 cp -p %{_sourcedir}/proxy/xroad-add-admin-user.sh %{buildroot}/usr/share/xroad/bin/
 cp -p %{_sourcedir}/proxy/xroad.pam %{buildroot}/etc/pam.d/xroad
 cp -p %{_sourcedir}/proxy/xroad-*.service %{buildroot}%{_unitdir}
-cp -p %{srcdir}/../../../proxy-ui/build/libs/proxy-ui.war %{buildroot}/usr/share/xroad/jlib/webapps/
 cp -p %{srcdir}/../../../proxy/build/libs/proxy-1.0.jar %{buildroot}/usr/share/xroad/jlib/
 cp -p %{srcdir}/default-configuration/proxy.ini %{buildroot}/etc/xroad/conf.d
 cp -p %{srcdir}/default-configuration/override-rhel-proxy.ini %{buildroot}/etc/xroad/conf.d/
-cp -p %{srcdir}/default-configuration/proxy-ui.ini %{buildroot}/etc/xroad/conf.d
 cp -p %{srcdir}/default-configuration/proxy-logback.xml %{buildroot}/etc/xroad/conf.d
-cp -p %{srcdir}/default-configuration/proxy-ui-jetty-logback-context-name.xml %{buildroot}/etc/xroad/conf.d/
 cp -p %{srcdir}/default-configuration/rsyslog.d/* %{buildroot}/etc/rsyslog.d/
 cp -p %{srcdir}/ubuntu/generic/xroad-proxy.logrotate %{buildroot}/etc/logrotate.d/xroad-proxy
 cp -p %{srcdir}/../../../LICENSE.txt %{buildroot}/usr/share/doc/%{name}/LICENSE.txt
-cp -p %{srcdir}/../../../securityserver-LICENSE.info %{buildroot}/usr/share/doc/%{name}/securityserver-LICENSE.info
+cp -p %{srcdir}/../../../3RD-PARTY-NOTICES.txt %{buildroot}/usr/share/doc/%{name}/3RD-PARTY-NOTICES.txt
 cp -p %{srcdir}/../../../../CHANGELOG.md %{buildroot}/usr/share/doc/%{name}/CHANGELOG.md
 cp -p %{srcdir}/common/proxy/etc/xroad/backup.d/??_xroad-proxy %{buildroot}/etc/xroad/backup.d/
 cp -p %{_sourcedir}/proxy/xroad-proxy %{buildroot}/etc/cron.d/
-cp -p %{srcdir}/common/proxy/etc/xroad/nginx/xroad-proxy.conf %{buildroot}/etc/xroad/nginx/
 
 ln -s /usr/share/xroad/jlib/proxy-1.0.jar %{buildroot}/usr/share/xroad/jlib/proxy.jar
-ln -s /etc/xroad/conf.d/proxy-ui-jetty-logback-context-name.xml %{buildroot}/etc/xroad/conf.d/jetty-logback-context-name.xml
 ln -s /usr/share/xroad/bin/xroad-add-admin-user.sh %{buildroot}/usr/bin/xroad-add-admin-user
-ln -s /etc/xroad/nginx/xroad-proxy.conf %{buildroot}/etc/nginx/conf.d/xroad-proxy.conf
 
 %clean
 rm -rf %{buildroot}
@@ -85,19 +76,16 @@ rm -rf %{buildroot}
 %config /etc/xroad/services/proxy.conf
 %config /etc/xroad/conf.d/proxy.ini
 %config /etc/xroad/conf.d/override-rhel-proxy.ini
-%config /etc/xroad/conf.d/proxy-ui.ini
 %config /etc/xroad/conf.d/proxy-logback.xml
-%config /etc/xroad/conf.d/jetty-logback-context-name.xml
-%config /etc/xroad/conf.d/proxy-ui-jetty-logback-context-name.xml
+%dir /etc/xroad/jetty
 %config /etc/xroad/jetty/clientproxy.xml
-%config /etc/xroad/jetty/contexts-admin/proxy-ui.xml
 %config /etc/xroad/jetty/serverproxy.xml
 %config /etc/xroad/jetty/ocsp-responder.xml
 %config /etc/xroad/services/jetty.conf
 %config(noreplace) %attr(644,root,root) /etc/pam.d/xroad
-%config /etc/xroad/nginx/xroad-proxy.conf
 %attr(0440,xroad,xroad) %config /etc/xroad/backup.d/??_xroad-proxy
 
+%defattr(-,root,root,-)
 %attr(644,root,root) %{_unitdir}/xroad-proxy.service
 
 %config %attr(644,root,root) /etc/logrotate.d/xroad-proxy
@@ -106,20 +94,18 @@ rm -rf %{buildroot}
 %config %attr(644,root,root) /etc/sudoers.d/xroad-proxy
 %config %attr(644,root,root) /etc/cron.d/xroad-proxy
 
-%attr(540,xroad,xroad) /usr/share/xroad/bin/xroad-proxy
-%attr(540,root,xroad) /usr/share/xroad/scripts/xroad-proxy-setup.sh
-%attr(540,root,xroad) /usr/share/xroad/scripts/xroad-initdb.sh
-%attr(540,root,xroad) /usr/share/xroad/scripts/xroad-proxy-port-redirect.sh
-%attr(544,root,xroad) /usr/share/xroad/bin/xroad-add-admin-user.sh
+%attr(550,root,xroad) /usr/share/xroad/bin/xroad-proxy
+%attr(540,root,root) /usr/share/xroad/scripts/xroad-proxy-setup.sh
+%attr(540,root,root) /usr/share/xroad/scripts/xroad-initdb.sh
+%attr(540,root,root) /usr/share/xroad/bin/xroad-add-admin-user.sh
+%attr(540,root,root) /usr/share/xroad/scripts/setup_serverconf_db.sh
 
-%defattr(-,root,root,-)
 /usr/bin/xroad-add-admin-user
 /usr/share/xroad/db/serverconf-changelog.xml
 /usr/share/xroad/db/serverconf-legacy-changelog.xml
 /usr/share/xroad/db/serverconf
 /usr/share/xroad/db/backup_and_remove_non-member_permissions.sh
 /usr/share/xroad/jlib/proxy*.jar
-/usr/share/xroad/jlib/webapps/proxy-ui.war
 /usr/share/xroad/scripts/backup_db.sh
 /usr/share/xroad/scripts/restore_db.sh
 /usr/share/xroad/scripts/verify_internal_configuration.sh
@@ -127,9 +113,8 @@ rm -rf %{buildroot}
 /usr/share/xroad/scripts/restore_xroad_proxy_configuration.sh
 /usr/share/xroad/scripts/autobackup_xroad_proxy_configuration.sh
 /usr/share/xroad/scripts/get_security_server_id.sh
-/etc/nginx/conf.d/xroad-proxy.conf
 %doc /usr/share/doc/%{name}/LICENSE.txt
-%doc /usr/share/doc/%{name}/securityserver-LICENSE.info
+%doc /usr/share/doc/%{name}/3RD-PARTY-NOTICES.txt
 %doc /usr/share/doc/%{name}/CHANGELOG.md
 
 %pre
@@ -138,9 +123,6 @@ if [ $1 -gt 1 ] ; then
     # remove the previous port forwarding rules (if any)
     if [ -e /etc/sysconfig/xroad-proxy ]; then
         source /etc/sysconfig/xroad-proxy
-    fi
-    if [ -x /usr/share/xroad/scripts/xroad-proxy-port-redirect.sh ]; then
-        /usr/share/xroad/scripts/xroad-proxy-port-redirect.sh disable
     fi
 
     mkdir -p %{_localstatedir}/lib/rpm-state/%{name}
@@ -224,7 +206,6 @@ migrate_conf_value /etc/xroad/conf.d/local.ini proxy enforce-token-pin-policy si
 
 if [ $1 -eq 1 ] && [ -x %{_bindir}/systemctl ]; then
     # initial installation
-    %{_bindir}/systemctl try-restart nginx.service
     %{_bindir}/systemctl try-restart rsyslog.service
 fi
 
@@ -235,8 +216,10 @@ fi
 %postun
 %systemd_postun_with_restart xroad-proxy.service
 %systemd_postun_with_restart xroad-confclient.service
-%systemd_postun_with_restart xroad-jetty9.service
-%systemd_postun_with_restart nginx.service
 %systemd_postun_with_restart rsyslogd.service
+
+%posttrans
+# restart (if running) nginx after /etc/xroad/nginx/xroad-proxy.conf has (possibly) been removed, so that port 4000 is freed
+%{_bindir}/systemctl --quiet try-restart nginx.service >/dev/null 2>&1 || true
 
 %changelog

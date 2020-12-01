@@ -1,5 +1,6 @@
 /**
  * The MIT License
+ * Copyright (c) 2019- Nordic Institute for Interoperability Solutions (NIIS)
  * Copyright (c) 2018 Estonian Information System Authority (RIA),
  * Nordic Institute for Interoperability Solutions (NIIS), Population Register Centre (VRK)
  * Copyright (c) 2015-2017 Estonian Information System Authority (RIA), Population Register Centre (VRK)
@@ -24,20 +25,25 @@
  */
 package org.niis.xroad.restapi.service;
 
+import ee.ria.xroad.common.util.CertUtils;
+import ee.ria.xroad.common.util.CryptoUtils;
 import ee.ria.xroad.signer.protocol.dto.CertRequestInfo;
 import ee.ria.xroad.signer.protocol.dto.CertificateInfo;
 import ee.ria.xroad.signer.protocol.dto.KeyInfo;
 import ee.ria.xroad.signer.protocol.dto.KeyUsageInfo;
 import ee.ria.xroad.signer.protocol.dto.TokenInfo;
 
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
+import java.security.cert.X509Certificate;
 import java.util.EnumSet;
 
 /**
  * Validation logic for possible actions done on tokens, keys, certs and csrs
  */
 @Component
+@Slf4j
 public class PossibleActionsRuleEngine {
 
     // duplicate definition, since we dont want add direct dependency on signer
@@ -109,9 +115,7 @@ public class PossibleActionsRuleEngine {
             actions.add(PossibleActionEnum.GENERATE_SIGN_CSR);
         }
         // EDIT_FRIENDLY_NAME
-        if (keyInfo.isSavedToConfiguration()) {
-            actions.add(PossibleActionEnum.EDIT_FRIENDLY_NAME);
-        }
+        actions.add(PossibleActionEnum.EDIT_FRIENDLY_NAME);
 
         return actions;
     }
@@ -146,10 +150,28 @@ public class PossibleActionsRuleEngine {
             }
         }
         if (!certificateInfo.isSavedToConfiguration()) {
-            actions.add(PossibleActionEnum.IMPORT_FROM_TOKEN);
+            // auth cert cannot be imported
+            if (isImportableSignCert(certificateInfo)) {
+                actions.add(PossibleActionEnum.IMPORT_FROM_TOKEN);
+            }
         }
 
         return actions;
+    }
+
+    /**
+     * Find out if certificateInfo is a sign cert that can be imported from a token.
+     * If there is an exception while determining this, interpret this as false, "not an importable sign cert"
+     * and swallow + log exception
+     */
+    private boolean isImportableSignCert(CertificateInfo certificateInfo) {
+        try {
+            X509Certificate x509 = CryptoUtils.readCertificate(certificateInfo.getCertificateBytes());
+            return CertUtils.isSigningCert(x509);
+        } catch (Exception e) {
+            log.warn("Unable to determine if certificate is a sign cert -> interpret as false", e);
+            return false;
+        }
     }
 
     /**

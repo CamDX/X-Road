@@ -1,11 +1,37 @@
+<!--
+   The MIT License
+   Copyright (c) 2019- Nordic Institute for Interoperability Solutions (NIIS)
+   Copyright (c) 2018 Estonian Information System Authority (RIA),
+   Nordic Institute for Interoperability Solutions (NIIS), Population Register Centre (VRK)
+   Copyright (c) 2015-2017 Estonian Information System Authority (RIA), Population Register Centre (VRK)
+
+   Permission is hereby granted, free of charge, to any person obtaining a copy
+   of this software and associated documentation files (the "Software"), to deal
+   in the Software without restriction, including without limitation the rights
+   to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+   copies of the Software, and to permit persons to whom the Software is
+   furnished to do so, subject to the following conditions:
+
+   The above copyright notice and this permission notice shall be included in
+   all copies or substantial portions of the Software.
+
+   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+   IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+   FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+   AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+   LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+   OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+   THE SOFTWARE.
+ -->
 <template>
   <v-app class="xrd-app">
     <app-toolbar />
-    <v-content app>
+    <v-main app>
+      <alerts-container />
       <transition name="fade" mode="out-in">
         <router-view />
       </transition>
-    </v-content>
+    </v-main>
     <snackbar />
     <app-footer />
   </v-app>
@@ -15,9 +41,10 @@
 import Vue from 'vue';
 import axios from 'axios';
 import Snackbar from '@/components/ui/Snackbar.vue';
-import { RouteName } from '@/global';
 import AppFooter from '@/components/layout/AppFooter.vue';
 import AppToolbar from '@/components/layout/AppToolbar.vue';
+import AlertsContainer from '@/components/ui/AlertsContainer.vue';
+import { mapGetters } from 'vuex';
 
 export default Vue.extend({
   name: 'App',
@@ -25,30 +52,61 @@ export default Vue.extend({
     AppToolbar,
     AppFooter,
     Snackbar,
+    AlertsContainer,
+  },
+  computed: {
+    ...mapGetters(['isSessionAlive']),
   },
   created() {
     // Add a response interceptor
     axios.interceptors.response.use(
       (response) => {
+        this.$store.commit('authUser');
         return response;
       },
       (error) => {
-        // Check that it's proper "unauthorized error".
-        // Also the response from from session timeout polling is handled elsewhere
+        /*
+          Check if error is a proper "unauthorized error" meaning it is not happening in sending login form data.
+          Also the response from from session timeout polling is handled in AppBase -component
+         */
         if (
-          error.response.status === 401 &&
-          error.response.config &&
-          !error.response.config.__isRetryRequest &&
-          !error.request.responseURL.includes('notifications/session-status')
+          error?.response?.status === 401 &&
+          this.$router.currentRoute.name !== 'login'
         ) {
           // if you ever get an unauthorized, logout the user
-          this.$store.dispatch('clearAuth');
-          this.$router.replace({ name: RouteName.Login });
+          this.$store.commit('setSessionAlive', false);
         }
+        // If the request is made with responseType: blob, but backend responds with json error
+        if (
+          error.request.responseType === 'blob' &&
+          error.response.data instanceof Blob &&
+          error.response.data.type &&
+          error.response.data.type.toLowerCase().indexOf('json') != -1
+        ) {
+          return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+
+            reader.onload = () => {
+              error.response.data = JSON.parse(reader.result as string);
+              resolve(Promise.reject(error));
+            };
+
+            reader.onerror = () => {
+              reject(error);
+            };
+
+            reader.readAsText(error.response.data);
+          });
+        }
+
         // Do something with response error
-        throw error;
+        return Promise.reject(error);
       },
     );
+
+    // Session-status api is called before accessing any view. The session-status data is only used to prevent
+    // opening views that user aren't allowed to see (flickering).
+    this.$store.dispatch('isSessionAlive');
   },
 });
 </script>
@@ -75,4 +133,3 @@ export default Vue.extend({
   background: white;
 }
 </style>
-

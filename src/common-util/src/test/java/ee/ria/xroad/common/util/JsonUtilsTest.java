@@ -1,5 +1,6 @@
 /**
  * The MIT License
+ * Copyright (c) 2019- Nordic Institute for Interoperability Solutions (NIIS)
  * Copyright (c) 2018 Estonian Information System Authority (RIA),
  * Nordic Institute for Interoperability Solutions (NIIS), Population Register Centre (VRK)
  * Copyright (c) 2015-2017 Estonian Information System Authority (RIA), Population Register Centre (VRK)
@@ -25,27 +26,35 @@
 package ee.ria.xroad.common.util;
 
 import com.google.gson.Gson;
+import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import org.junit.Test;
 
+import java.time.OffsetDateTime;
+
 import static ee.ria.xroad.common.util.JsonUtils.Exclude;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotEquals;
 
 /**
  * Unit tests for {@link ee.ria.xroad.common.util.JsonUtils}
  */
 public class JsonUtilsTest {
 
-    private static final Gson GSON = JsonUtils.getSerializer();
+    private static final Gson GSON = JsonUtils.getSerializer(true);
 
     @RequiredArgsConstructor
-    private class Foo {
+    @EqualsAndHashCode
+    public static class Foo {
         @Getter
         private final int a;
         @Exclude
         @Getter
         private final int b;
+
+        private final OffsetDateTime offsetDateTime;
+        private final OffsetDateTime otherUpdate;
     }
 
     /**
@@ -53,6 +62,13 @@ public class JsonUtilsTest {
      */
     @Test
     public void testIgnoresTabsInContentType() {
-        assertEquals("{\"a\":100}", GSON.toJson(new Foo(100, 200)));
+        final Foo foo = new Foo(100, 200, OffsetDateTime.now(), null);
+        final String json = GSON.toJson(foo);
+        final Foo foo2 = GSON.fromJson(json, Foo.class);
+
+        assertEquals(foo.a, foo2.a);
+        assertEquals(foo.offsetDateTime, foo2.offsetDateTime);
+        assertEquals(foo.otherUpdate, foo2.otherUpdate);
+        assertNotEquals(foo.b, foo2.b);
     }
 }

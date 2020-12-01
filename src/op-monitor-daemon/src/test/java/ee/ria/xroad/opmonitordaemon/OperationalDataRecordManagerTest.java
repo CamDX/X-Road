@@ -1,5 +1,6 @@
 /**
  * The MIT License
+ * Copyright (c) 2019- Nordic Institute for Interoperability Solutions (NIIS)
  * Copyright (c) 2018 Estonian Information System Authority (RIA),
  * Nordic Institute for Interoperability Solutions (NIIS), Population Register Centre (VRK)
  * Copyright (c) 2015-2017 Estonian Information System Authority (RIA), Population Register Centre (VRK)
@@ -30,13 +31,13 @@ import ee.ria.xroad.common.opmonitoring.OpMonitoringSystemProperties;
 
 import com.google.common.collect.Sets;
 import lombok.extern.slf4j.Slf4j;
-import org.joda.time.DateTime;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.ExpectedException;
 
 import java.lang.reflect.Field;
+import java.time.Instant;
 import java.util.Collections;
 import java.util.HashSet;
 
@@ -194,7 +195,7 @@ public class OperationalDataRecordManagerTest extends BaseTestUsingDB {
     @Test
     public void storeAndQueryDataFilteringByOutputFields() throws Exception {
         ClientId client = ClientId.create(
-               "XTEE-CI-XM", "GOV", "00000001", "System1");
+                "XTEE-CI-XM", "GOV", "00000001", "System1");
 
         storeFullOperationalDataRecords(1, 1474968960L);
 
@@ -387,7 +388,7 @@ public class OperationalDataRecordManagerTest extends BaseTestUsingDB {
         storeFullOperationalDataRecords(1, 1474968970L);
         storeFullOperationalDataRecords(1, 1474968980L);
 
-        OperationalDataRecordCleaner.cleanRecords(new DateTime(1474968975000L));
+        OperationalDataRecordCleaner.cleanRecords(Instant.ofEpochMilli(1474968975000L));
 
         OperationalDataRecords result = queryRecords(1474968960L, 1474968980L);
 

@@ -1,5 +1,6 @@
 /**
  * The MIT License
+ * Copyright (c) 2019- Nordic Institute for Interoperability Solutions (NIIS)
  * Copyright (c) 2018 Estonian Information System Authority (RIA),
  * Nordic Institute for Interoperability Solutions (NIIS), Population Register Centre (VRK)
  * Copyright (c) 2015-2017 Estonian Information System Authority (RIA), Population Register Centre (VRK)
@@ -47,6 +48,8 @@ public class ManagementRequestSenderService {
     private final GlobalConfService globalConfService;
     private final CurrentSecurityServerId currentSecurityServerId;
 
+    private static final String MANAGEMENT_REQUEST_SENDING_FAILED_ERROR = "Sending management request failed";
+
     @Autowired
     public ManagementRequestSenderService(GlobalConfFacade globalConfFacade, GlobalConfService globalConfService,
             CurrentSecurityServerId currentSecurityServerId) {
@@ -73,6 +76,7 @@ public class ManagementRequestSenderService {
         try {
             return sender.sendAuthCertRegRequest(currentSecurityServerId.getServerId(), address, authCert);
         } catch (Exception e) {
+            log.error(MANAGEMENT_REQUEST_SENDING_FAILED_ERROR, e);
             if (e instanceof CodedException) {
                 throw (CodedException) e;
             }
@@ -97,6 +101,7 @@ public class ManagementRequestSenderService {
         try {
             return sender.sendAuthCertDeletionRequest(currentSecurityServerId.getServerId(), authCert);
         } catch (Exception e) {
+            log.error(MANAGEMENT_REQUEST_SENDING_FAILED_ERROR, e);
             throw new ManagementRequestSendingFailedException(e);
         }
     }
@@ -114,8 +119,10 @@ public class ManagementRequestSenderService {
         try {
             return sender.sendClientRegRequest(currentSecurityServerId.getServerId(), clientId);
         } catch (CodedException ce) {
+            log.error(MANAGEMENT_REQUEST_SENDING_FAILED_ERROR, ce);
             throw ce;
         } catch (Exception e) {
+            log.error(MANAGEMENT_REQUEST_SENDING_FAILED_ERROR, e);
             throw new ManagementRequestSendingFailedException(e);
         }
     }
@@ -133,8 +140,10 @@ public class ManagementRequestSenderService {
         try {
             return sender.sendClientDeletionRequest(currentSecurityServerId.getServerId(), clientId);
         } catch (CodedException ce) {
+            log.error(MANAGEMENT_REQUEST_SENDING_FAILED_ERROR, ce);
             throw ce;
         } catch (Exception e) {
+            log.error(MANAGEMENT_REQUEST_SENDING_FAILED_ERROR, e);
             throw new ManagementRequestSendingFailedException(e);
         }
     }
@@ -152,8 +161,10 @@ public class ManagementRequestSenderService {
         try {
             return sender.sendOwnerChangeRequest(currentSecurityServerId.getServerId(), clientId);
         } catch (CodedException ce) {
+            log.error(MANAGEMENT_REQUEST_SENDING_FAILED_ERROR, ce);
             throw ce;
         } catch (Exception e) {
+            log.error(MANAGEMENT_REQUEST_SENDING_FAILED_ERROR, e);
             throw new ManagementRequestSendingFailedException(e);
         }
     }

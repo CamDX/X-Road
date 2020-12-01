@@ -1,5 +1,6 @@
 /**
  * The MIT License
+ * Copyright (c) 2019- Nordic Institute for Interoperability Solutions (NIIS)
  * Copyright (c) 2018 Estonian Information System Authority (RIA),
  * Nordic Institute for Interoperability Solutions (NIIS), Population Register Centre (VRK)
  * Copyright (c) 2015-2017 Estonian Information System Authority (RIA), Population Register Centre (VRK)
@@ -31,22 +32,17 @@ import ee.ria.xroad.signer.protocol.dto.TokenInfo;
 import lombok.extern.slf4j.Slf4j;
 import org.junit.Before;
 import org.junit.Test;
-import org.junit.runner.RunWith;
-import org.niis.xroad.restapi.facade.SignerProxyFacade;
+import org.niis.xroad.restapi.config.audit.AuditDataHelper;
+import org.niis.xroad.restapi.dto.TokenInitStatusInfo;
 import org.niis.xroad.restapi.util.TokenTestUtils;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.jdbc.AutoConfigureTestDatabase;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.mock.mockito.MockBean;
-import org.springframework.security.test.context.support.WithMockUser;
-import org.springframework.test.context.junit4.SpringRunner;
 import org.springframework.test.util.ReflectionTestUtils;
-import org.springframework.transaction.annotation.Transactional;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.fail;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.when;
 import static org.niis.xroad.restapi.service.TokenService.CKR_PIN_INCORRECT_MESSAGE;
 import static org.niis.xroad.restapi.service.TokenService.LOGIN_FAILED_FAULT_CODE;
 import static org.niis.xroad.restapi.service.TokenService.PIN_INCORRECT_FAULT_CODE;
@@ -55,13 +51,17 @@ import static org.niis.xroad.restapi.service.TokenService.TOKEN_NOT_FOUND_FAULT_
 /**
  * test token service.
  */
-@RunWith(SpringRunner.class)
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
-@AutoConfigureTestDatabase
 @Slf4j
-@Transactional
-@WithMockUser
-public class TokenServiceTest {
+public class TokenServiceTest extends AbstractServiceTestContext {
+
+    @Autowired
+    TokenService tokenService;
+
+    @Autowired
+    PossibleActionsRuleEngine possibleActionsRuleEngine;
+
+    @Autowired
+    AuditDataHelper auditDataHelper;
 
     // token ids for mocking
     private static final String WRONG_SOFTTOKEN_PIN_TOKEN_ID = "wrong-soft-pin";
@@ -69,19 +69,10 @@ public class TokenServiceTest {
     private static final String UNKNOWN_LOGIN_FAIL_TOKEN_ID = "unknown-login-fail";
     private static final String TOKEN_NOT_FOUND_TOKEN_ID = "token-404";
     private static final String UNRECOGNIZED_FAULT_CODE_TOKEN_ID = "unknown-faultcode";
-    private static final String GOOD_TOKEN_ID = "token-which-exists";
     private static final String GOOD_KEY_ID = "key-which-exists";
     private static final String GOOD_TOKEN_NAME = "good-token";
 
-    @Autowired
-    private TokenService tokenService;
-
-    @MockBean
-    private SignerProxyFacade signerProxyFacade;
-
-    // allow all operations in this test
-    @MockBean
-    private PossibleActionsRuleEngine possibleActionsRuleEngine;
+    public static final String GOOD_TOKEN_ID = "token-which-exists";
 
     @Before
     public void setup() throws Exception {
@@ -137,6 +128,7 @@ public class TokenServiceTest {
             ReflectionTestUtils.setField(tokenInfo, "friendlyName", newTokenName);
             return null;
         }).when(signerProxyFacade).setTokenFriendlyName(any(), any());
+        mockPossibleActionsRuleEngineAllowAll();
     }
 
     @Test
@@ -222,5 +214,28 @@ public class TokenServiceTest {
     @Test(expected = TokenNotFoundException.class)
     public void updateNonExistingTokenFriendlyName() throws Exception {
         tokenService.updateTokenFriendlyName(TOKEN_NOT_FOUND_TOKEN_ID, "new-name");
+    }
+
+    @Test
+    public void getUnknownSoftwareTokenInitStatus() throws Exception {
+        when(signerProxyFacade.getTokens()).thenThrow(new Exception());
+        TokenInitStatusInfo tokenStatus = tokenService.getSoftwareTokenInitStatus();
+        assertEquals(TokenInitStatusInfo.UNKNOWN, tokenStatus);
+    }
+
+    private void mockServices(PossibleActionsRuleEngine possibleActionsRuleEngineParam) {
+        // override instead of mocking for better performance
+        tokenService = new TokenService(signerProxyFacade, possibleActionsRuleEngineParam, auditDataHelper);
+    }
+
+    private void mockPossibleActionsRuleEngineAllowAll() {
+        possibleActionsRuleEngine = new PossibleActionsRuleEngine() {
+            @Override
+            public void requirePossibleTokenAction(PossibleActionEnum action, TokenInfo tokenInfo) throws
+                    ActionNotPossibleException {
+                // noop
+            }
+        };
+        mockServices(possibleActionsRuleEngine);
     }
 }

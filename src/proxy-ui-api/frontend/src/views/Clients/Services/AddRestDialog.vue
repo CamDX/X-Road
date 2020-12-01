@@ -1,34 +1,70 @@
-<template>
-  <simpleDialog
-    :dialog="dialog"
-    :width="560"
-    title="services.addRest"
-    @save="save"
-    @cancel="cancel"
-    :disableSave="!isValid"
-  >
-    <div slot="content">
+<!--
+   The MIT License
+   Copyright (c) 2019- Nordic Institute for Interoperability Solutions (NIIS)
+   Copyright (c) 2018 Estonian Information System Authority (RIA),
+   Nordic Institute for Interoperability Solutions (NIIS), Population Register Centre (VRK)
+   Copyright (c) 2015-2017 Estonian Information System Authority (RIA), Population Register Centre (VRK)
 
-      <ValidationObserver ref="form" v-slot="{ validate, invalid }">
+   Permission is hereby granted, free of charge, to any person obtaining a copy
+   of this software and associated documentation files (the "Software"), to deal
+   in the Software without restriction, including without limitation the rights
+   to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+   copies of the Software, and to permit persons to whom the Software is
+   furnished to do so, subject to the following conditions:
+
+   The above copyright notice and this permission notice shall be included in
+   all copies or substantial portions of the Software.
+
+   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+   IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+   FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+   AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+   LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+   OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+   THE SOFTWARE.
+ -->
+<template>
+  <ValidationObserver ref="form" v-slot="{ valid }">
+    <simpleDialog
+      :dialog="dialog"
+      :width="560"
+      title="services.addRest"
+      @save="save"
+      @cancel="cancel"
+      :disableSave="!valid"
+    >
+      <div slot="content">
         <div class="dlg-edit-row">
-          <div class="dlg-row-title">{{$t('services.serviceType')}}</div>
+          <div class="dlg-row-title">{{ $t('services.serviceType') }}</div>
 
           <ValidationProvider
             rules="required"
             name="serviceType"
             v-slot="{ errors }"
-            class="validation-provider dlg-row-input">
-
-            <v-radio-group v-model="serviceType" name="serviceType" :error-messages="errors" row>
-              <v-radio name="REST" :label="$t('services.restApiBasePath')" value="REST" ></v-radio>
-              <v-radio name="OPENAPI3" :label="$t('services.OpenApi3Description')" value="OPENAPI3" ></v-radio>
+            class="validation-provider dlg-row-input"
+          >
+            <v-radio-group
+              v-model="serviceType"
+              name="serviceType"
+              :error-messages="errors"
+              row
+            >
+              <v-radio
+                name="REST"
+                :label="$t('services.restApiBasePath')"
+                value="REST"
+              ></v-radio>
+              <v-radio
+                name="OPENAPI3"
+                :label="$t('services.OpenApi3Description')"
+                value="OPENAPI3"
+              ></v-radio>
             </v-radio-group>
-
           </ValidationProvider>
         </div>
 
         <div class="dlg-edit-row">
-          <div class="dlg-row-title">{{$t('services.url')}}</div>
+          <div class="dlg-row-title">{{ $t('services.url') }}</div>
 
           <ValidationProvider
             rules="required|restUrl"
@@ -36,19 +72,22 @@
             v-slot="{ errors }"
             class="validation-provider dlg-row-input"
           >
-            <v-text-field :placeholder="$t('services.urlPlaceholder')"
-                          v-model="url"
-                          single-line
-                          name="serviceUrl"
-                          :error-messages="errors"></v-text-field>
+            <v-text-field
+              :placeholder="$t('services.urlPlaceholder')"
+              v-model="url"
+              single-line
+              name="serviceUrl"
+              autofocus
+              :error-messages="errors"
+            ></v-text-field>
           </ValidationProvider>
         </div>
 
         <div class="dlg-edit-row">
-          <div class="dlg-row-title">{{$t('services.serviceCode')}}</div>
+          <div class="dlg-row-title">{{ $t('services.serviceCode') }}</div>
 
           <ValidationProvider
-            rules="required"
+            rules="required|xrdIdentifier"
             name="serviceCode"
             v-slot="{ errors }"
             class="validation-provider"
@@ -65,27 +104,21 @@
             ></v-text-field>
           </ValidationProvider>
         </div>
-      </ValidationObserver>
-    </div>
-  </simpleDialog>
+      </div>
+    </simpleDialog>
+  </ValidationObserver>
 </template>
 
 <script lang="ts">
 import Vue from 'vue';
 import { ValidationProvider, ValidationObserver } from 'vee-validate';
 import SimpleDialog from '@/components/ui/SimpleDialog.vue';
-import { isValidRestURL } from '@/util/helpers';
-import * as api from '@/util/api';
 
 export default Vue.extend({
   components: { SimpleDialog, ValidationProvider, ValidationObserver },
   props: {
     dialog: {
       type: Boolean,
-      required: true,
-    },
-    clientId: {
-      type: String,
       required: true,
     },
   },
@@ -96,54 +129,22 @@ export default Vue.extend({
       serviceCode: '',
     };
   },
-  computed: {
-    isValid(): boolean {
-      if (isValidRestURL(this.url) && this.serviceCode.length > 0 && this.serviceType !== '') {
-        return true;
-      }
-
-      return false;
-    },
-  },
   methods: {
     cancel(): void {
       this.$emit('cancel');
       this.clear();
     },
     save(): void {
-      api
-        .post(`/clients/${this.clientId}/service-descriptions`, {
-          url: this.url,
-          rest_service_code: this.serviceCode,
-          type: this.serviceType,
-        })
-        .then((res) => {
-          this.$store.dispatch(
-            'showSuccess',
-            this.serviceType === 'OPENAPI3'
-              ? 'services.openApi3Added'
-              : 'services.restAdded',
-          );
-          this.$emit('save', {
-            serviceType: this.serviceType,
-            url: this.url,
-            serviceCode: this.serviceCode,
-          });
-          this.clear();
-        })
-        .catch((error) => {
-          const errorMessage =
-            error?.response?.data?.error?.code === 'openapi_parsing_error'
-              ? this.$t('services.openApi3ParsingFailed')
-              : error.message;
-          this.$store.dispatch('showErrorMessageRaw', errorMessage);
-        });
+      this.$emit('save', this.serviceType, this.url, this.serviceCode);
+      this.clear();
     },
     clear(): void {
       this.url = '';
       this.serviceCode = '';
       this.serviceType = '';
-      (this.$refs.form as InstanceType<typeof ValidationObserver>).reset();
+      requestAnimationFrame(() => {
+        (this.$refs.form as InstanceType<typeof ValidationObserver>).reset();
+      });
     },
   },
 });

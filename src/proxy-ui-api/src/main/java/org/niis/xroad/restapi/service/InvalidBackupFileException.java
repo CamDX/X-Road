@@ -1,5 +1,6 @@
 /**
  * The MIT License
+ * Copyright (c) 2019- Nordic Institute for Interoperability Solutions (NIIS)
  * Copyright (c) 2018 Estonian Information System Authority (RIA),
  * Nordic Institute for Interoperability Solutions (NIIS), Population Register Centre (VRK)
  * Copyright (c) 2015-2017 Estonian Information System Authority (RIA), Population Register Centre (VRK)
@@ -26,9 +27,9 @@ package org.niis.xroad.restapi.service;
 
 import org.niis.xroad.restapi.exceptions.ErrorDeviation;
 
-public class InvalidBackupFileException extends ServiceException {
-    public static final String ERROR_INVALID_BACKUP_FILE = "invalid_backup_file";
+import static org.niis.xroad.restapi.exceptions.DeviationCodes.ERROR_INVALID_BACKUP_FILE;
 
+public class InvalidBackupFileException extends ServiceException {
     public InvalidBackupFileException(String msg) {
         super(msg, new ErrorDeviation(ERROR_INVALID_BACKUP_FILE));
     }

@@ -1,5 +1,6 @@
 /**
  * The MIT License
+ * Copyright (c) 2019- Nordic Institute for Interoperability Solutions (NIIS)
  * Copyright (c) 2018 Estonian Information System Authority (RIA),
  * Nordic Institute for Interoperability Solutions (NIIS), Population Register Centre (VRK)
  * Copyright (c) 2015-2017 Estonian Information System Authority (RIA), Population Register Centre (VRK)
@@ -31,15 +32,18 @@ import ee.ria.xroad.common.identifier.ClientId;
 import com.google.common.collect.Streams;
 import org.niis.xroad.restapi.openapi.BadRequestException;
 import org.niis.xroad.restapi.openapi.model.Service;
+import org.niis.xroad.restapi.util.EndpointHelper;
 import org.niis.xroad.restapi.util.FormatUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Comparator;
 import java.util.List;
 import java.util.stream.Collectors;
 
+import static org.apache.commons.lang3.ObjectUtils.defaultIfNull;
 import static org.niis.xroad.restapi.converter.Converters.ENCODED_ID_SEPARATOR;
 
 /**
@@ -67,7 +71,7 @@ public class ServiceConverter {
     }
 
     /**
-     * Converts a group of ServiceTypes to a list of Services.
+     * Converts a group of ServiceTypes to a list of Services and sorts the list alphabetically by fullServiceCode.
      * This expects that serviceType.serviceDescription.client.endpoints have been fetched
      * @param serviceTypes
      * @return
@@ -75,6 +79,7 @@ public class ServiceConverter {
     public List<Service> convertServices(Iterable<ServiceType> serviceTypes, ClientId clientId) {
         return Streams.stream(serviceTypes)
                 .map(serviceType -> convert(serviceType, clientId))
+                .sorted(Comparator.comparing(Service::getFullServiceCode))
                 .collect(Collectors.toList());
     }
 
@@ -89,10 +94,16 @@ public class ServiceConverter {
         Service service = new Service();
 
         service.setId(convertId(serviceType, clientId));
-        service.setServiceCode(FormatUtils.getServiceFullName(serviceType));
-        service.setSslAuth(serviceType.getSslAuthentication());
+        service.setServiceCode(serviceType.getServiceCode());
+        service.setFullServiceCode(FormatUtils.getServiceFullName(serviceType));
+        if (serviceType.getUrl().startsWith(FormatUtils.HTTP_PROTOCOL)) {
+            service.setSslAuth(false);
+        } else {
+            service.setSslAuth(defaultIfNull(serviceType.getSslAuthentication(), true));
+        }
         service.setTimeout(serviceType.getTimeout());
         service.setUrl(serviceType.getUrl());
+        service.setTitle(serviceType.getTitle());
 
         List<EndpointType> endpoints = endpointHelper.getEndpoints(serviceType,
                 serviceType.getServiceDescription().getClient());

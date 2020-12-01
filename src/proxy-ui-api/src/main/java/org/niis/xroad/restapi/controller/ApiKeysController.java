@@ -1,5 +1,6 @@
 /**
  * The MIT License
+ * Copyright (c) 2019- Nordic Institute for Interoperability Solutions (NIIS)
  * Copyright (c) 2018 Estonian Information System Authority (RIA),
  * Nordic Institute for Interoperability Solutions (NIIS), Population Register Centre (VRK)
  * Copyright (c) 2015-2017 Estonian Information System Authority (RIA), Population Register Centre (VRK)
@@ -25,6 +26,7 @@
 package org.niis.xroad.restapi.controller;
 
 import lombok.extern.slf4j.Slf4j;
+import org.niis.xroad.restapi.config.audit.AuditEventMethod;
 import org.niis.xroad.restapi.converter.PublicApiKeyDataConverter;
 import org.niis.xroad.restapi.domain.InvalidRoleNameException;
 import org.niis.xroad.restapi.domain.PersistentApiKeyType;
@@ -48,27 +50,37 @@ import org.springframework.web.bind.annotation.RestController;
 import java.util.Collection;
 import java.util.List;
 
+import static org.niis.xroad.restapi.config.audit.RestApiAuditEvent.API_KEY_CREATE;
+import static org.niis.xroad.restapi.config.audit.RestApiAuditEvent.API_KEY_REMOVE;
+import static org.niis.xroad.restapi.config.audit.RestApiAuditEvent.API_KEY_UPDATE;
+import static org.niis.xroad.restapi.openapi.ApiUtil.API_V1_PREFIX;
+
 /**
  * Controller for rest apis for api key operations
  */
 @RestController
-@RequestMapping(ApiKeysController.API_KEYS_PATH)
+@RequestMapping(ApiKeysController.API_KEYS_V1_PATH)
 @Slf4j
-@PreAuthorize("hasRole('XROAD_SYSTEM_ADMINISTRATOR')")
+@PreAuthorize("denyAll")
 public class ApiKeysController {
 
-    public static final String API_KEYS_PATH = "/api/api-keys";
+    public static final String API_KEYS_V1_PATH = API_V1_PREFIX + "/api-keys";
+
+    private final ApiKeyService apiKeyService;
+    private final PublicApiKeyDataConverter publicApiKeyDataConverter;
 
     @Autowired
-    private ApiKeyService apiKeyService;
-
-    @Autowired
-    private PublicApiKeyDataConverter publicApiKeyDataConverter;
+    public ApiKeysController(ApiKeyService apiKeyService, PublicApiKeyDataConverter publicApiKeyDataConverter) {
+        this.apiKeyService = apiKeyService;
+        this.publicApiKeyDataConverter = publicApiKeyDataConverter;
+    }
 
     /**
      * create a new api key
      */
     @PostMapping(produces = MediaType.APPLICATION_JSON_UTF8_VALUE)
+    @AuditEventMethod(event = API_KEY_CREATE)
+    @PreAuthorize("hasAuthority('CREATE_API_KEY')")
     public ResponseEntity<PublicApiKeyData> createKey(@RequestBody List<String> roles) {
         try {
             PersistentApiKeyType createdKeyData = apiKeyService.create(roles);
@@ -82,8 +94,10 @@ public class ApiKeysController {
      * update an existing api key
      */
     @PutMapping(value = "/{id}", produces = MediaType.APPLICATION_JSON_UTF8_VALUE)
+    @AuditEventMethod(event = API_KEY_UPDATE)
+    @PreAuthorize("hasAuthority('UPDATE_API_KEY')")
     public ResponseEntity<PublicApiKeyData> updateKey(@PathVariable("id") long id,
-                                                          @RequestBody List<String> roles) {
+            @RequestBody List<String> roles) {
         try {
             PersistentApiKeyType key = apiKeyService.update(id, roles);
             return new ResponseEntity<>(publicApiKeyDataConverter.convert(key), HttpStatus.OK);
@@ -98,6 +112,7 @@ public class ApiKeysController {
      * list api keys from db
      */
     @RequestMapping(method = RequestMethod.GET)
+    @PreAuthorize("hasAuthority('VIEW_API_KEYS')")
     public ResponseEntity<Collection<PublicApiKeyData>> list() {
         Collection<PersistentApiKeyType> keys = apiKeyService.listAll();
         return new ResponseEntity<>(publicApiKeyDataConverter.convert(keys), HttpStatus.OK);
@@ -109,6 +124,8 @@ public class ApiKeysController {
      * @return
      */
     @RequestMapping(value = "/{id}", method = RequestMethod.DELETE)
+    @AuditEventMethod(event = API_KEY_REMOVE)
+    @PreAuthorize("hasAuthority('REVOKE_API_KEY')")
     public ResponseEntity revoke(@PathVariable("id") long id) {
         try {
             apiKeyService.removeById(id);

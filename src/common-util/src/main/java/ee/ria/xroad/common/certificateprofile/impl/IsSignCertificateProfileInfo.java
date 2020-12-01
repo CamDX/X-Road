@@ -1,5 +1,6 @@
 /**
  * The MIT License
+ * Copyright (c) 2019- Nordic Institute for Interoperability Solutions (NIIS)
  * Copyright (c) 2018 Estonian Information System Authority (RIA),
  * Nordic Institute for Interoperability Solutions (NIIS), Population Register Centre (VRK)
  * Copyright (c) 2015-2017 Estonian Information System Authority (RIA), Population Register Centre (VRK)
@@ -40,7 +41,7 @@ public class IsSignCertificateProfileInfo extends AbstractCertificateProfileInfo
 
     /**
      * Constructor.
-     * 
+     *
      * @param params the parameters
      */
     public IsSignCertificateProfileInfo(Parameters params) {
@@ -57,21 +58,21 @@ public class IsSignCertificateProfileInfo extends AbstractCertificateProfileInfo
                 new EnumLocalizedFieldDescriptionImpl(
                         "O",
                         DnFieldLabelLocalizationKey.INSTANCE_IDENTIFIER_O,
-                        params.getServerId().getXRoadInstance()
+                        params.getClientId().getXRoadInstance()
                 ).setReadOnly(true),
 
                 // Member Class Identifier
                 new EnumLocalizedFieldDescriptionImpl(
                         "OU",
                         DnFieldLabelLocalizationKey.MEMBER_CLASS_OU,
-                        params.getServerId().getMemberClass()
+                        params.getClientId().getMemberClass()
                 ).setReadOnly(true),
 
                 // Member code
                 new EnumLocalizedFieldDescriptionImpl(
                         "CN",
                         DnFieldLabelLocalizationKey.MEMBER_CODE,
-                        params.getServerId().getMemberCode()
+                        params.getClientId().getMemberCode()
                 ).setReadOnly(true),
 
                 // Serialnumber

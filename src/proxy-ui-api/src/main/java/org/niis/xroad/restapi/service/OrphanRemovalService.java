@@ -1,5 +1,6 @@
 /**
  * The MIT License
+ * Copyright (c) 2019- Nordic Institute for Interoperability Solutions (NIIS)
  * Copyright (c) 2018 Estonian Information System Authority (RIA),
  * Nordic Institute for Interoperability Solutions (NIIS), Population Register Centre (VRK)
  * Copyright (c) 2015-2017 Estonian Information System Authority (RIA), Population Register Centre (VRK)
@@ -33,6 +34,7 @@ import ee.ria.xroad.signer.protocol.dto.TokenInfo;
 
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
+import org.niis.xroad.restapi.config.audit.AuditDataHelper;
 import org.niis.xroad.restapi.exceptions.ErrorDeviation;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -43,6 +45,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
+
+import static org.niis.xroad.restapi.exceptions.DeviationCodes.ERROR_ORPHANS_NOT_FOUND;
 
 /**
  * orphan cert and csr removal service
@@ -57,16 +61,19 @@ public class OrphanRemovalService {
     private final TokenCertificateService tokenCertificateService;
     private final ClientService clientService;
     private final KeyService keyService;
+    private final AuditDataHelper auditDataHelper;
 
     @Autowired
     public OrphanRemovalService(TokenService tokenService,
             TokenCertificateService tokenCertificateService,
             ClientService clientService,
-            KeyService keyService) {
+            KeyService keyService,
+            AuditDataHelper auditDataHelper) {
         this.tokenService = tokenService;
         this.tokenCertificateService = tokenCertificateService;
         this.clientService = clientService;
         this.keyService = keyService;
+        this.auditDataHelper = auditDataHelper;
     }
 
     /**
@@ -208,6 +215,8 @@ public class OrphanRemovalService {
     public void deleteOrphans(ClientId clientId) throws OrphansNotFoundException,
             ActionNotPossibleException, GlobalConfOutdatedException {
 
+        auditDataHelper.put(clientId);
+
         if (isAlive(clientId) || hasAliveSiblings(clientId)) {
             throw new OrphansNotFoundException();
         }
@@ -219,7 +228,7 @@ public class OrphanRemovalService {
         try {
             // delete the orphans
             for (KeyInfo keyInfo : orphans.getKeys()) {
-                keyService.deleteKey(keyInfo.getId());
+                keyService.deleteKeyAndIgnoreWarnings(keyInfo.getId());
             }
             tokenCertificateService.deleteCertificates(orphans.getCerts());
             for (CertRequestInfo certRequestInfo : orphans.getCsrs()) {
@@ -235,20 +244,8 @@ public class OrphanRemovalService {
      * Thrown when someone tries to remove orphans, but none exist
      */
     public static class OrphansNotFoundException extends NotFoundException {
-        public static final String ERROR_ORPHANS_NOT_FOUND = "orphans_not_found";
         public OrphansNotFoundException() {
             super(new ErrorDeviation(ERROR_ORPHANS_NOT_FOUND));
         }
     }
-
-    /**
-     * Thrown when someone tries to remove orphans, but the client has not been deleted
-     */
-    public static class ClientNotDeletedException extends ServiceException {
-        public static final String ERROR_CLIENT_NOT_DELETED = "client_not_deleted";
-        public ClientNotDeletedException(String s) {
-            super(s, new ErrorDeviation(ERROR_CLIENT_NOT_DELETED));
-        }
-    }
-
 }

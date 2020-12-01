@@ -1,5 +1,6 @@
 /**
  * The MIT License
+ * Copyright (c) 2019- Nordic Institute for Interoperability Solutions (NIIS)
  * Copyright (c) 2018 Estonian Information System Authority (RIA),
  * Nordic Institute for Interoperability Solutions (NIIS), Population Register Centre (VRK)
  * Copyright (c) 2015-2017 Estonian Information System Authority (RIA), Population Register Centre (VRK)
@@ -36,6 +37,16 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Optional;
+import java.util.Set;
+import java.util.stream.Collectors;
+
+import static org.niis.xroad.restapi.exceptions.DeviationCodes.ERROR_BASE_ENDPOINT_NOT_FOUND;
+import static org.niis.xroad.restapi.exceptions.DeviationCodes.ERROR_ILLEGAL_GENERATED_ENDPOINT_REMOVE;
+import static org.niis.xroad.restapi.exceptions.DeviationCodes.ERROR_ILLEGAL_GENERATED_ENDPOINT_UPDATE;
+
 @Service
 @Transactional
 @PreAuthorize("isAuthenticated()")
@@ -43,11 +54,14 @@ public class EndpointService {
 
     private final ClientRepository clientRepository;
     private final EndpointRepository endpointRepository;
+    private final ServiceService serviceService;
 
     @Autowired
-    public EndpointService(ClientRepository clientRepository, EndpointRepository endpointRepository) {
+    public EndpointService(ClientRepository clientRepository, EndpointRepository endpointRepository,
+            ServiceService serviceService) {
         this.clientRepository = clientRepository;
         this.endpointRepository = endpointRepository;
+        this.serviceService = serviceService;
     }
 
     /**
@@ -98,9 +112,12 @@ public class EndpointService {
      * @throws EndpointNotFoundException                endpoint not found with given id
      * @throws IllegalGeneratedEndpointUpdateException  trying to update that is generated automatically
      * @throws IllegalArgumentException                 passing illegal combination of parameters
+     * @throws ClientNotFoundException                  client for the endpoint not found
+     * @throws EndpointAlreadyExistsException           equivalent endpoint already exists for this client
      */
     public EndpointType updateEndpoint(Long id, String method, String path)
-            throws EndpointNotFoundException, IllegalGeneratedEndpointUpdateException {
+            throws EndpointNotFoundException, IllegalGeneratedEndpointUpdateException, ClientNotFoundException,
+            EndpointAlreadyExistsException {
 
         if ("".equals(path)) {
             throw new IllegalArgumentException("Path can't be empty string when updating an endpoint: "
@@ -112,7 +129,13 @@ public class EndpointService {
                 + id.toString());
         }
 
-        EndpointType endpoint = getEndpoint(id);
+        ClientType client = clientRepository.getClientByEndpointId(id);
+        Optional<EndpointType> endpointType = client.getEndpoint().stream().filter(e -> e.getId() == id).findFirst();
+        if (!endpointType.isPresent()) {
+            throw new EndpointNotFoundException(id.toString());
+        }
+
+        EndpointType endpoint = endpointType.get();
 
         if (endpoint.isGenerated()) {
             throw new IllegalGeneratedEndpointUpdateException(id.toString());
@@ -126,6 +149,11 @@ public class EndpointService {
             endpoint.setMethod(method);
         }
 
+        if (client.getEndpoint().stream().filter(e -> e.getId() != id).anyMatch(e -> e.isEquivalent(endpoint))) {
+            throw new EndpointAlreadyExistsException("Endpoint with equivalent service code, method and path already "
+                    + "exists for this client");
+        }
+
         endpointRepository.saveOrUpdate(endpoint);
 
         return endpoint;
@@ -135,39 +163,88 @@ public class EndpointService {
      * Get matching base-endpoint for the given client and service.
      *
      * @param serviceType
-     * @return
-     * @throws EndpointNotFoundException
+     * @throws EndpointNotFoundException if base endpoint matching given parameters did not exist
      */
     public EndpointType getServiceBaseEndpoint(ServiceType serviceType)
             throws EndpointNotFoundException {
         ClientType clientType = serviceType.getServiceDescription().getClient();
+        String serviceCode = serviceType.getServiceCode();
+        return getServiceBaseEndpoint(clientType, serviceCode);
+    }
+
+    /**
+     * Get matching base-endpoint for the given client and service code.
+     * @param clientType
+     * @param serviceCode
+     * @throws EndpointNotFoundException if base endpoint matching given parameters did not exist
+     */
+    public EndpointType getServiceBaseEndpoint(ClientType clientType, String serviceCode)
+            throws EndpointNotFoundException {
         return clientType.getEndpoint().stream()
-                .filter(endpointType -> endpointType.getServiceCode().equals(serviceType.getServiceCode())
+                .filter(endpointType -> endpointType.getServiceCode().equals(serviceCode)
                         && endpointType.getMethod().equals(EndpointType.ANY_METHOD)
                         && endpointType.getPath().equals(EndpointType.ANY_PATH))
                 .findFirst()
                 .orElseThrow(() -> new EndpointNotFoundException(
-                        EndpointNotFoundException.ERROR_BASE_ENDPOINT_NOT_FOUND, "Base endpoint not found for client"
-                        + clientType.getIdentifier() + " and servicecode " + serviceType.getServiceCode()));
+                        ERROR_BASE_ENDPOINT_NOT_FOUND, "Base endpoint not found for client "
+                        + clientType.getIdentifier() + " and servicecode " + serviceCode));
     }
 
-    public static class IllegalGeneratedEndpointUpdateException extends ServiceException {
-        public static final String ILLEGAL_GENERATED_ENDPOINT_UPDATE = "illegal_generated_endpoint_update";
+    /**
+     * Get matching base-endpoints for the given client and service codes.
+     * @param clientType
+     * @param serviceCodes
+     * @throws EndpointNotFoundException if any base endpoint matching given parameters did not exist
+     */
+    public List<EndpointType> getServiceBaseEndpoints(ClientType clientType, Set<String> serviceCodes)
+            throws EndpointNotFoundException {
+        List<EndpointType> baseEndpoints = new ArrayList<>();
+        for (String serviceCode: serviceCodes) {
+            baseEndpoints.add(getServiceBaseEndpoint(clientType, serviceCode));
+        }
+        return baseEndpoints;
+    }
 
+    /**
+     * Get base endpoint for given client and full service code
+     * @throws ServiceNotFoundException if no match was found
+     */
+    public EndpointType getBaseEndpointType(ClientType clientType, String fullServiceCode)
+            throws ServiceNotFoundException {
+        ServiceType serviceType = serviceService.getServiceFromClient(clientType, fullServiceCode);
+        try {
+            return getServiceBaseEndpoint(serviceType);
+        } catch (EndpointNotFoundException e) {
+            throw new ServiceNotFoundException(e);
+        }
+    }
+
+
+    /**
+     * Get all endpoints (base and others) for the given client and service code.
+     * @param clientType
+     * @param serviceCodes
+     */
+    public List<EndpointType> getServiceEndpoints(ClientType clientType, Set<String> serviceCodes) {
+        return clientType.getEndpoint().stream()
+                .filter(endpointType -> serviceCodes.contains(endpointType.getServiceCode()))
+                .collect(Collectors.toList());
+    }
+
+
+    public static class IllegalGeneratedEndpointUpdateException extends ServiceException {
         private static final String MESSAGE = "Updating generated endpoint is not allowed: %s";
 
         public IllegalGeneratedEndpointUpdateException(String id) {
-            super(String.format(MESSAGE, id), new ErrorDeviation(ILLEGAL_GENERATED_ENDPOINT_UPDATE, id));
+            super(String.format(MESSAGE, id), new ErrorDeviation(ERROR_ILLEGAL_GENERATED_ENDPOINT_UPDATE, id));
         }
     }
 
     public static class IllegalGeneratedEndpointRemoveException extends ServiceException {
-        public static final String ILLEGAL_GENERATED_ENDPOINT_REMOVE = "illegal_generated_endpoint_remove";
-
         private static final String MESSAGE = "Removing generated endpoint is not allowed: %s";
 
         public IllegalGeneratedEndpointRemoveException(String id) {
-            super(String.format(MESSAGE, id), new ErrorDeviation(ILLEGAL_GENERATED_ENDPOINT_REMOVE, id));
+            super(String.format(MESSAGE, id), new ErrorDeviation(ERROR_ILLEGAL_GENERATED_ENDPOINT_REMOVE, id));
         }
     }
 

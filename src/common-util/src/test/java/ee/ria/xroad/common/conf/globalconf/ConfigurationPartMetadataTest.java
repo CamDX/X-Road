@@ -1,5 +1,6 @@
 /**
  * The MIT License
+ * Copyright (c) 2019- Nordic Institute for Interoperability Solutions (NIIS)
  * Copyright (c) 2018 Estonian Information System Authority (RIA),
  * Nordic Institute for Interoperability Solutions (NIIS), Population Register Centre (VRK)
  * Copyright (c) 2015-2017 Estonian Information System Authority (RIA), Population Register Centre (VRK)
@@ -24,10 +25,10 @@
  */
 package ee.ria.xroad.common.conf.globalconf;
 
-import org.joda.time.DateTime;
 import org.junit.Test;
 
 import java.io.ByteArrayInputStream;
+import java.time.OffsetDateTime;
 
 import static org.junit.Assert.assertEquals;
 
@@ -45,10 +46,11 @@ public class ConfigurationPartMetadataTest {
         ConfigurationPartMetadata write = new ConfigurationPartMetadata();
         write.setContentIdentifier("SHARED-PARAMETERS");
         write.setInstanceIdentifier("FOO");
-        write.setExpirationDate(new DateTime());
+        write.setExpirationDate(OffsetDateTime.now());
 
+        final byte[] bytes = write.toByteArray();
         ConfigurationPartMetadata read = ConfigurationPartMetadata.read(
-                new ByteArrayInputStream(write.toByteArray()));
+                new ByteArrayInputStream(bytes));
 
         assertEquals(write.getContentIdentifier(), read.getContentIdentifier());
         assertEquals(write.getInstanceIdentifier(),

@@ -1,5 +1,6 @@
 /**
  * The MIT License
+ * Copyright (c) 2019- Nordic Institute for Interoperability Solutions (NIIS)
  * Copyright (c) 2018 Estonian Information System Authority (RIA),
  * Nordic Institute for Interoperability Solutions (NIIS), Population Register Centre (VRK)
  * Copyright (c) 2015-2017 Estonian Information System Authority (RIA), Population Register Centre (VRK)
@@ -26,17 +27,17 @@ package org.niis.xroad.restapi.service;
 
 import org.niis.xroad.restapi.exceptions.ErrorDeviation;
 
+import static org.niis.xroad.restapi.exceptions.DeviationCodes.ERROR_MANAGEMENT_REQUEST_SENDING_FAILED;
+
 /**
  * Management request failed
  */
 public class ManagementRequestSendingFailedException extends ServiceException {
-    public static final String MANAGEMENT_REQUEST_SENDING_FAILED = "management_request_sending_failed";
-
     public ManagementRequestSendingFailedException(Throwable t) {
         super(t, createError(t));
     }
 
     private static ErrorDeviation createError(Throwable t) {
-        return new ErrorDeviation(MANAGEMENT_REQUEST_SENDING_FAILED, t.getMessage());
+        return new ErrorDeviation(ERROR_MANAGEMENT_REQUEST_SENDING_FAILED, t.getMessage());
     }
 }

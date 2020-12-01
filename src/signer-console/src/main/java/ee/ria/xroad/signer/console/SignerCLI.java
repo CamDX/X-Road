@@ -1,5 +1,6 @@
 /**
  * The MIT License
+ * Copyright (c) 2019- Nordic Institute for Interoperability Solutions (NIIS)
  * Copyright (c) 2018 Estonian Information System Authority (RIA),
  * Nordic Institute for Interoperability Solutions (NIIS), Population Register Centre (VRK)
  * Copyright (c) 2015-2017 Estonian Information System Authority (RIA), Population Register Centre (VRK)
@@ -75,13 +76,11 @@ import asg.cliche.Param;
 import asg.cliche.Shell;
 import asg.cliche.ShellFactory;
 import com.typesafe.config.ConfigFactory;
-import org.apache.commons.cli.BasicParser;
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.CommandLineParser;
+import org.apache.commons.cli.DefaultParser;
 import org.apache.commons.cli.Options;
-import org.apache.commons.lang.StringUtils;
-import scala.concurrent.Await;
-import scala.concurrent.duration.Duration;
+import org.apache.commons.lang3.StringUtils;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -94,6 +93,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Scanner;
+import java.util.concurrent.TimeUnit;
 
 import static ee.ria.xroad.common.AuditLogger.XROAD_USER;
 import static ee.ria.xroad.common.SystemProperties.CONF_FILE_SIGNER;
@@ -150,6 +150,7 @@ public class SignerCLI {
 
     /**
      * Shell input converters
+     *
      * @see <a href="http://cliche.sourceforge.net/">Cliche Manual</a>
      */
     @SuppressWarnings({"squid:S1873", "squid:S2386"})
@@ -169,6 +170,7 @@ public class SignerCLI {
 
     /**
      * Lists all tokens.
+     *
      * @throws Exception if an error occurs
      */
     @Command(description = "Lists all tokens")
@@ -179,6 +181,7 @@ public class SignerCLI {
 
     /**
      * Lists all keys on all tokens.
+     *
      * @throws Exception if an error occurs
      */
     @Command(description = "Lists all keys on all tokens")
@@ -199,6 +202,7 @@ public class SignerCLI {
 
     /**
      * Lists all certs on all keys on all tokens.
+     *
      * @throws Exception if an error occurs
      */
     @Command(description = "Lists all certs on all keys on all tokens")
@@ -227,6 +231,7 @@ public class SignerCLI {
 
     /**
      * Sets token friendly name.
+     *
      * @param tokenId      token id
      * @param friendlyName friendly name
      * @throws Exception if an error occurs
@@ -252,6 +257,7 @@ public class SignerCLI {
 
     /**
      * Sets key friendly name.
+     *
      * @param keyId        key id
      * @param friendlyName friendly name
      * @throws Exception if an error occurs
@@ -276,6 +282,7 @@ public class SignerCLI {
 
     /**
      * Returns key ID for certificate hash.
+     *
      * @param certHash certificate hash
      * @throws Exception if an error occurs
      */
@@ -289,6 +296,7 @@ public class SignerCLI {
 
     /**
      * Returns all certificates of a member.
+     *
      * @param memberId member if
      * @throws Exception if an error occurs
      */
@@ -308,6 +316,7 @@ public class SignerCLI {
 
     /**
      * Activates a certificate.
+     *
      * @param certId certificate id
      * @throws Exception if an error occurs
      */
@@ -330,6 +339,7 @@ public class SignerCLI {
 
     /**
      * Deactivates a certificate.
+     *
      * @param certId certificate id
      * @throws Exception if an error occurs
      */
@@ -352,6 +362,7 @@ public class SignerCLI {
 
     /**
      * Deletes a key.
+     *
      * @param keyId key id
      * @throws Exception if an error occurs
      */
@@ -373,6 +384,7 @@ public class SignerCLI {
 
     /**
      * Deletes a certificate.
+     *
      * @param certId certificate id
      * @throws Exception if an error occurs
      */
@@ -395,6 +407,7 @@ public class SignerCLI {
 
     /**
      * Deletes a certificate request.
+     *
      * @param certReqId certificate request id
      * @throws Exception if an error occurs
      */
@@ -417,6 +430,7 @@ public class SignerCLI {
 
     /**
      * Returns suitable authentication key for security server.
+     *
      * @param clientId   client id
      * @param serverCode server code
      * @throws Exception if an error occurs
@@ -435,6 +449,7 @@ public class SignerCLI {
 
     /**
      * Returns signing info for member.
+     *
      * @param clientId client id
      * @throws Exception if an error occurs
      */
@@ -451,6 +466,7 @@ public class SignerCLI {
 
     /**
      * Imports a certificate.
+     *
      * @param file     file
      * @param clientId client id
      * @throws Exception if an error occurs
@@ -480,6 +496,7 @@ public class SignerCLI {
 
     /**
      * Log in token.
+     *
      * @param tokenId token id
      * @throws Exception if an error occurs
      */
@@ -507,6 +524,7 @@ public class SignerCLI {
 
     /**
      * Log out token.
+     *
      * @param tokenId token id
      * @throws Exception if an error occurs
      */
@@ -529,6 +547,7 @@ public class SignerCLI {
 
     /**
      * Initialize software token
+     *
      * @throws Exception if an error occurs
      */
     @Command(description = "Initialize software token")
@@ -555,6 +574,7 @@ public class SignerCLI {
 
     /**
      * Sign some data
+     *
      * @param keyId the key id
      * @param data  the data
      * @throws Exception if an error occurs
@@ -578,6 +598,7 @@ public class SignerCLI {
 
     /**
      * Sign a file.
+     *
      * @param keyId    the key id
      * @param fileName the file name
      * @throws Exception if an error occurs
@@ -600,33 +621,46 @@ public class SignerCLI {
 
     /**
      * Benchmark signing.
+     *
      * @param keyId key id
      * @throws Exception if an error occurs
      */
     @Command(description = "Benchmark signing")
     public void signBenchmark(@Param(name = "keyId", description = "Key ID") String keyId) throws Exception {
+        signBenchmark(keyId, BENCHMARK_ITERATIONS);
+    }
+
+    /**
+     * Benchmark signing.
+     *
+     * @param keyId key id
+     * @throws Exception if an error occurs
+     */
+    @Command(description = "Benchmark signing")
+    public void signBenchmark(@Param(name = "keyId", description = "Key ID") String keyId,
+            @Param(name = "iterations", description = "iterations") int iterations) throws Exception {
         String data = "Hello world!";
         String digestAlgoId = CryptoUtils.SHA512_ID;
 
         GetSignMechanismResponse mechanismResponse = SignerClient.execute(new GetSignMechanism(keyId));
 
         String signAlgoId = CryptoUtils.getSignatureAlgorithmId(digestAlgoId, mechanismResponse.getSignMechanismName());
+        final byte[] digest = calculateDigest(digestAlgoId, data.getBytes(StandardCharsets.UTF_8));
+        final long startTime = System.nanoTime();
+        final Sign cmd = new Sign(keyId, signAlgoId, digest);
 
-        byte[] digest = calculateDigest(digestAlgoId, data.getBytes(StandardCharsets.UTF_8));
-
-        long startTime = System.currentTimeMillis();
-
-        for (int i = 0; i < BENCHMARK_ITERATIONS; i++) {
-            SignerClient.execute(new Sign(keyId, signAlgoId, digest));
+        for (int i = 0; i < iterations; i++) {
+            SignerClient.execute(cmd);
         }
 
-        long duration = System.currentTimeMillis() - startTime;
+        final long duration = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startTime);
 
-        System.out.println("Signed " + BENCHMARK_ITERATIONS + " times in " + duration + " milliseconds");
+        System.out.println("Signed " + iterations + " times in " + duration + " milliseconds");
     }
 
     /**
      * Generate key on token.
+     *
      * @param tokenId token id
      * @param label   label
      * @throws Exception if an error occurs
@@ -656,6 +690,7 @@ public class SignerCLI {
 
     /**
      * Generate certificate request.
+     *
      * @param keyId       key id
      * @param memberId    member id
      * @param usage       usage
@@ -700,6 +735,7 @@ public class SignerCLI {
 
     /**
      * Create dummy public key certificate.
+     *
      * @param keyId key id
      * @param cn    common name
      * @throws Exception if an error occurs
@@ -730,6 +766,7 @@ public class SignerCLI {
 
     /**
      * Check if batch signing is available on token.
+     *
      * @param keyId key id
      * @throws Exception if an error occurs
      */
@@ -746,6 +783,7 @@ public class SignerCLI {
 
     /**
      * Show certificate.
+     *
      * @param certId certificate id
      * @throws Exception if an error occurs
      */
@@ -775,6 +813,7 @@ public class SignerCLI {
 
     /**
      * Program entry point.
+     *
      * @param args arguments
      * @throws Exception if an error occurs
      */
@@ -805,7 +844,7 @@ public class SignerCLI {
                 startCommandLoop();
             }
         } finally {
-            Await.ready(actorSystem.terminate(), Duration.Inf());
+            actorSystem.terminate();
         }
     }
 
@@ -824,7 +863,7 @@ public class SignerCLI {
     }
 
     private static CommandLine getCommandLine(String[] args) throws Exception {
-        CommandLineParser parser = new BasicParser();
+        CommandLineParser parser = new DefaultParser();
 
         Options options = new Options();
 

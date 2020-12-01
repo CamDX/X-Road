@@ -1,5 +1,6 @@
 /**
  * The MIT License
+ * Copyright (c) 2019- Nordic Institute for Interoperability Solutions (NIIS)
  * Copyright (c) 2018 Estonian Information System Authority (RIA),
  * Nordic Institute for Interoperability Solutions (NIIS), Population Register Centre (VRK)
  * Copyright (c) 2015-2017 Estonian Information System Authority (RIA), Population Register Centre (VRK)
@@ -25,7 +26,6 @@
 package org.niis.xroad.restapi.auth.securityconfigurer;
 
 import org.niis.xroad.restapi.controller.ApiKeysController;
-import org.niis.xroad.restapi.domain.Role;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Configuration;
@@ -36,7 +36,7 @@ import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.WebSecurityConfigurerAdapter;
 import org.springframework.security.config.http.SessionCreationPolicy;
 
-import static org.niis.xroad.restapi.auth.PamAuthenticationProvider.LOCALHOST_PAM_AUTHENTICATION_BEAN;
+import static org.niis.xroad.restapi.auth.PamAuthenticationProvider.KEY_MANAGEMENT_PAM_AUTHENTICATION;
 
 /**
  * basic authentication configuration for managing api keys
@@ -47,16 +47,16 @@ import static org.niis.xroad.restapi.auth.PamAuthenticationProvider.LOCALHOST_PA
 public class ManageApiKeysWebSecurityConfigurerAdapter extends WebSecurityConfigurerAdapter {
 
     @Autowired
-    @Qualifier(LOCALHOST_PAM_AUTHENTICATION_BEAN)
+    @Qualifier(KEY_MANAGEMENT_PAM_AUTHENTICATION)
     private AuthenticationProvider authenticationProvider;
 
     @Override
     protected void configure(HttpSecurity http) throws Exception {
         http
-            .antMatcher(ApiKeysController.API_KEYS_PATH + "/**")
+            .antMatcher(ApiKeysController.API_KEYS_V1_PATH + "/**")
             .authorizeRequests()
                 .anyRequest()
-                .hasRole(Role.XROAD_SYSTEM_ADMINISTRATOR.name())
+                .authenticated()
                 .and()
             .sessionManagement()
                 .sessionCreationPolicy(SessionCreationPolicy.NEVER)

@@ -1,83 +1,95 @@
+<!--
+   The MIT License
+   Copyright (c) 2019- Nordic Institute for Interoperability Solutions (NIIS)
+   Copyright (c) 2018 Estonian Information System Authority (RIA),
+   Nordic Institute for Interoperability Solutions (NIIS), Population Register Centre (VRK)
+   Copyright (c) 2015-2017 Estonian Information System Authority (RIA), Population Register Centre (VRK)
+
+   Permission is hereby granted, free of charge, to any person obtaining a copy
+   of this software and associated documentation files (the "Software"), to deal
+   in the Software without restriction, including without limitation the rights
+   to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+   copies of the Software, and to permit persons to whom the Software is
+   furnished to do so, subject to the following conditions:
+
+   The above copyright notice and this permission notice shall be included in
+   all copies or substantial portions of the Software.
+
+   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+   IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+   FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+   AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+   LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+   OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+   THE SOFTWARE.
+ -->
 <template>
   <div>
     <table class="xrd-table">
       <thead>
         <tr>
-          <th>{{$t(title)}}</th>
-          <th>{{$t('keys.id')}}</th>
+          <th>{{ $t(title) }}</th>
+          <th>{{ $t('keys.id') }}</th>
+          <th>{{ $t('keys.ocsp') }}</th>
+          <th>{{ $t('keys.expires') }}</th>
+          <th>{{ $t('keys.status') }}</th>
+          <th></th>
         </tr>
       </thead>
-      <tbody v-for="key in keys" v-bind:key="key.id">
-        <!-- Key type SOFTWARE -->
-        <template v-if="tokenType === 'SOFTWARE'">
-          <tr>
-            <td>
-              <div class="name-wrap">
-                <i class="icon-xrd_key icon" @click="keyClick(key)"></i>
-                <div class="clickable-link" @click="keyClick(key)">{{key.name}}</div>
-              </div>
-            </td>
-            <td>
-              <div class="id-wrap">
-                <div class="clickable-link" @click="keyClick(key)">{{key.id}}</div>
-                <SmallButton
-                  v-if="hasPermission"
-                  class="table-button-fix"
-                  :disabled="disableGenerateCsr(key)"
-                  @click="generateCsr(key)"
-                >{{$t('keys.generateCsr')}}</SmallButton>
-              </div>
-            </td>
-          </tr>
-        </template>
 
-        <!-- Key type HARDWARE -->
-        <template v-if="tokenType === 'HARDWARE'">
-          <tr v-bind:class="{borderless: hasCertificates(key)}">
-            <td>
-              <div class="name-wrap-top">
-                <v-icon class="icon" @click="keyClick(key)">mdi-key-outline</v-icon>
-                <div class="clickable-link" @click="keyClick(key)">{{key.name}}</div>
+      <tbody v-for="key in keys" v-bind:key="key.id">
+        <tr>
+          <td>
+            <div class="name-wrap">
+              <i class="icon-xrd_key icon clickable" @click="keyClick(key)"></i>
+              <div class="clickable-link" @click="keyClick(key)">
+                {{ key.name }}
               </div>
-            </td>
-            <td class="td-align-right">
-              <div class="id-wrap">
-                <div class="clickable-link" @click="keyClick(key)">{{key.id}}</div>
-                <SmallButton
-                  v-if="hasPermission"
-                  class="table-button-fix"
-                  :disabled="disableGenerateCsr(key)"
-                  @click="generateCsr(key)"
-                >{{$t('keys.generateCsr')}}</SmallButton>
+            </div>
+          </td>
+          <td>
+            <div class="id-wrap">
+              <div class="clickable-link" @click="keyClick(key)">
+                {{ key.id }}
               </div>
-            </td>
-          </tr>
-          <template v-if="hasCertificates(key)">
-            <tr
-              v-for="certificate in key.certificates"
-              v-bind:key="certificate.certificate_details.hash"
+            </div>
+          </td>
+          <td></td>
+          <td></td>
+          <td></td>
+          <td class="align-right">
+            <SmallButton
+              v-if="canCreateCsr"
+              class="table-button-fix"
+              :disabled="disableGenerateCsr(key)"
+              @click="generateCsr(key)"
+              >{{ $t('keys.generateCsr') }}</SmallButton
             >
-              <td class="td-name">
-                <div class="name-wrap">
-                  <v-icon
-                    v-bind:class="{hidden: showHardwareTokenImportCert(certificate)}"
-                    class="icon"
-                  >mdi-file-document-outline</v-icon>
-                  <span>{{certificate.certificate_details.issuer_common_name}} {{certificate.certificate_details.serial}}</span>
-                </div>
-              </td>
-              <td>
-                <div class="id-wrap">
-                  <SmallButton
-                    v-if="showHardwareTokenImportCert(certificate) && hasPermission"
-                    @click="importCert(certificate.certificate_details.hash)"
-                    class="table-button-fix"
-                  >{{$t('keys.importCert')}}</SmallButton>
-                </div>
-              </td>
-            </tr>
-          </template>
-        </template>
+          </td>
+        </tr>
+
+        <CertificateRow
+          v-for="cert in key.certificates"
+          v-bind:key="cert.id"
+          :cert="cert"
+          @certificate-click="certificateClick(cert, key)"
+        >
+          <div slot="certificateAction">
+            <template v-if="canImportFromToken">
+              <SmallButton
+                v-if="cert.possible_actions.includes('IMPORT_FROM_TOKEN')"
+                class="table-button-fix"
+                @click="importCert(cert.certificate_details.hash)"
+                >{{ $t('keys.importCert') }}</SmallButton
+              >
+
+              <!-- Special case where HW cert has auth usage -->
+              <div v-else-if="key.usage === 'AUTHENTICATION'">
+                {{ $t('keys.authNotSupported') }}
+              </div>
+            </template>
+          </div>
+        </CertificateRow>
       </tbody>
     </table>
   </div>
@@ -89,12 +101,14 @@
  */
 import Vue from 'vue';
 import SmallButton from '@/components/ui/SmallButton.vue';
-import { Key, TokenCertificate } from '@/types';
-import { Permissions, PossibleActions, UsageTypes } from '@/global';
+import { Key, PossibleAction, TokenCertificate } from '@/openapi-types';
+import { Permissions, RouteName } from '@/global';
+import CertificateRow from '@/views/KeysAndCertificates/SignAndAuthKeys/CertificateRow.vue';
 
 export default Vue.extend({
   components: {
     SmallButton,
+    CertificateRow,
   },
   props: {
     keys: {
@@ -114,11 +128,15 @@ export default Vue.extend({
     },
   },
   computed: {
-    hasPermission(): boolean {
-      // Can the user login to the token and see actions
-      return this.$store.getters.hasPermission(
-        Permissions.ACTIVATE_DEACTIVATE_TOKEN,
+    canCreateCsr(): boolean {
+      return (
+        this.$store.getters.hasPermission(Permissions.GENERATE_AUTH_CERT_REQ) ||
+        this.$store.getters.hasPermission(Permissions.GENERATE_SIGN_CERT_REQ)
       );
+    },
+    canImportFromToken(): boolean {
+      // Can the user import certificate from hardware token
+      return this.$store.getters.hasPermission(Permissions.IMPORT_SIGN_CERT);
     },
   },
   methods: {
@@ -128,45 +146,55 @@ export default Vue.extend({
       }
 
       if (
-        key.possible_actions?.includes(PossibleActions.GENERATE_AUTH_CSR) ||
-        key.possible_actions?.includes(PossibleActions.GENERATE_SIGN_CSR)
+        key.possible_actions?.includes(PossibleAction.GENERATE_AUTH_CSR) ||
+        key.possible_actions?.includes(PossibleAction.GENERATE_SIGN_CSR)
       ) {
         return false;
       }
 
       return true;
     },
+    importCert(hash: string): void {
+      this.$emit('import-cert-by-hash', hash);
+    },
+    certificateClick(cert: TokenCertificate, key: Key): void {
+      this.$router.push({
+        name: RouteName.Certificate,
+        params: {
+          hash: cert.certificate_details.hash,
+          usage: key.usage,
+        },
+      });
+    },
     keyClick(key: Key): void {
-      this.$emit('keyClick', key);
+      this.$emit('key-click', key);
     },
     generateCsr(key: Key): void {
-      this.$emit('generateCsr', key);
+      this.$emit('generate-csr', key);
     },
-    showHardwareTokenImportCert(certificate: TokenCertificate): boolean {
-      return !certificate.saved_to_configuration;
-    },
-    hasCertificates(key: Key): boolean {
-      return key.certificates && key.certificates.length > 0;
-    },
-    importCert(hash: string): void {
-      this.$emit('importCertByHash', hash);
+    fetchData(): void {
+      // Fetch tokens from backend
+      this.$emit('refresh-list');
     },
   },
 });
 </script>
-
 
 <style lang="scss" scoped>
 @import '../../../assets/tables';
 .icon {
   margin-left: 18px;
   margin-right: 20px;
+}
+
+.clickable {
   cursor: pointer;
 }
 
 .clickable-link {
   text-decoration: underline;
   cursor: pointer;
+  height: 100%;
 }
 
 .table-button-fix {
@@ -177,7 +205,6 @@ export default Vue.extend({
 .name-wrap {
   display: flex;
   flex-direction: row;
-  align-items: baseline;
   align-items: center;
 
   i.v-icon.mdi-file-document-outline {
@@ -193,15 +220,7 @@ export default Vue.extend({
   width: 100%;
 }
 
-.td-align-right {
+.align-right {
   text-align: right;
-}
-
-.borderless td {
-  border-bottom: none;
-}
-
-.hidden {
-  visibility: hidden;
 }
 </style>

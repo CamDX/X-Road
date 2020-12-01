@@ -1,5 +1,6 @@
 /**
  * The MIT License
+ * Copyright (c) 2019- Nordic Institute for Interoperability Solutions (NIIS)
  * Copyright (c) 2018 Estonian Information System Authority (RIA),
  * Nordic Institute for Interoperability Solutions (NIIS), Population Register Centre (VRK)
  * Copyright (c) 2015-2017 Estonian Information System Authority (RIA), Population Register Centre (VRK)
@@ -31,6 +32,7 @@ import ee.ria.xroad.signer.protocol.dto.KeyUsageInfo;
 import ee.ria.xroad.signer.protocol.message.CertificateRequestFormat;
 
 import lombok.extern.slf4j.Slf4j;
+import org.niis.xroad.restapi.config.audit.AuditEventMethod;
 import org.niis.xroad.restapi.converter.ClientConverter;
 import org.niis.xroad.restapi.converter.CsrFormatMapping;
 import org.niis.xroad.restapi.converter.KeyConverter;
@@ -52,6 +54,7 @@ import org.niis.xroad.restapi.service.KeyService;
 import org.niis.xroad.restapi.service.PossibleActionEnum;
 import org.niis.xroad.restapi.service.ServerConfService;
 import org.niis.xroad.restapi.service.TokenCertificateService;
+import org.niis.xroad.restapi.service.UnhandledWarningsException;
 import org.niis.xroad.restapi.service.WrongKeyUsageException;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.io.Resource;
@@ -64,11 +67,16 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import java.util.EnumSet;
 import java.util.List;
 
+import static org.niis.xroad.restapi.config.audit.RestApiAuditEvent.DELETE_CSR;
+import static org.niis.xroad.restapi.config.audit.RestApiAuditEvent.DELETE_KEY;
+import static org.niis.xroad.restapi.config.audit.RestApiAuditEvent.GENERATE_CSR;
+import static org.niis.xroad.restapi.config.audit.RestApiAuditEvent.UPDATE_KEY_NAME;
+
 /**
  * keys controller
  */
 @Controller
-@RequestMapping("/api")
+@RequestMapping(ApiUtil.API_V1_PREFIX)
 @Slf4j
 @PreAuthorize("denyAll")
 public class KeysApiController implements KeysApi {
@@ -119,6 +127,7 @@ public class KeysApiController implements KeysApi {
 
     @Override
     @PreAuthorize("hasAuthority('EDIT_KEY_FRIENDLY_NAME')")
+    @AuditEventMethod(event = UPDATE_KEY_NAME)
     public ResponseEntity<Key> updateKey(String id, KeyName keyName) {
         KeyInfo keyInfo = null;
         try {
@@ -138,6 +147,7 @@ public class KeysApiController implements KeysApi {
             + "#csrGenerate.keyUsageType == T(org.niis.xroad.restapi.openapi.model.KeyUsageType).AUTHENTICATION)"
             + " or (hasAuthority('GENERATE_SIGN_CERT_REQ') and "
             + "#csrGenerate.keyUsageType == T(org.niis.xroad.restapi.openapi.model.KeyUsageType).SIGNING)")
+    @AuditEventMethod(event = GENERATE_CSR)
     public ResponseEntity<Resource> generateCsr(String keyId, CsrGenerate csrGenerate) {
 
         // squid:S3655 throwing NoSuchElementException if there is no value present is
@@ -178,6 +188,7 @@ public class KeysApiController implements KeysApi {
 
     @Override
     @PreAuthorize("hasAuthority('DELETE_AUTH_CERT') or hasAuthority('DELETE_SIGN_CERT')")
+    @AuditEventMethod(event = DELETE_CSR)
     public ResponseEntity<Void> deleteCsr(String keyId, String csrId) {
         try {
             tokenCertificateService.deleteCsr(csrId);
@@ -214,14 +225,15 @@ public class KeysApiController implements KeysApi {
 
     @Override
     @PreAuthorize("hasAnyAuthority('DELETE_KEY', 'DELETE_AUTH_KEY', 'DELETE_SIGN_KEY')")
-    public ResponseEntity<Void> deleteKey(String keyId) {
+    @AuditEventMethod(event = DELETE_KEY)
+    public ResponseEntity<Void> deleteKey(String keyId, Boolean ignoreWarnings) {
         try {
-            keyService.deleteKey(keyId);
+            keyService.deleteKey(keyId, ignoreWarnings);
         } catch (KeyNotFoundException e) {
             throw new ResourceNotFoundException(e);
         } catch (ActionNotPossibleException e) {
             throw new ConflictException(e);
-        } catch (GlobalConfOutdatedException e) {
+        } catch (GlobalConfOutdatedException | UnhandledWarningsException e) {
             throw new BadRequestException(e);
         }
         return new ResponseEntity<>(HttpStatus.NO_CONTENT);

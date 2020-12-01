@@ -1,5 +1,6 @@
 /**
  * The MIT License
+ * Copyright (c) 2019- Nordic Institute for Interoperability Solutions (NIIS)
  * Copyright (c) 2018 Estonian Information System Authority (RIA),
  * Nordic Institute for Interoperability Solutions (NIIS), Population Register Centre (VRK)
  * Copyright (c) 2015-2017 Estonian Information System Authority (RIA), Population Register Centre (VRK)
@@ -24,8 +25,9 @@
  */
 package org.niis.xroad.restapi.openapi.validator;
 
+import ee.ria.xroad.common.validation.EncodedIdentifierValidator.ValidationError;
+
 import org.junit.Test;
-import org.niis.xroad.restapi.validator.EncodedIdentifierValidator.ValidationError;
 
 import java.util.EnumSet;
 import java.util.Set;

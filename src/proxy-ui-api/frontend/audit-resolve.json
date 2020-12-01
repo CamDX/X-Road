@@ -1,9 +1,8 @@
 {
   "decisions": {
-    "1179|@vue/cli-plugin-e2e-nightwatch>nightwatch>optimist>minimist": {
+    "1500|@vue/cli-plugin-unit-jest>ts-jest>yargs-parser": {
       "decision": "ignore",
-      "madeAt": 1585851470638,
-      "expiresAt": 1588443462112
+      "madeAt": 1600081668835
     }
   },
   "rules": {},

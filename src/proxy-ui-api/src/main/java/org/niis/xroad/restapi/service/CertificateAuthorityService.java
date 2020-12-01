@@ -1,5 +1,6 @@
 /**
  * The MIT License
+ * Copyright (c) 2019- Nordic Institute for Interoperability Solutions (NIIS)
  * Copyright (c) 2018 Estonian Information System Authority (RIA),
  * Nordic Institute for Interoperability Solutions (NIIS), Population Register Centre (VRK)
  * Copyright (c) 2015-2017 Estonian Information System Authority (RIA), Population Register Centre (VRK)
@@ -38,6 +39,7 @@ import ee.ria.xroad.signer.protocol.dto.KeyUsageInfo;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
+import org.niis.xroad.restapi.cache.CurrentSecurityServerId;
 import org.niis.xroad.restapi.dto.ApprovedCaDto;
 import org.niis.xroad.restapi.exceptions.ErrorDeviation;
 import org.niis.xroad.restapi.facade.GlobalConfFacade;
@@ -61,6 +63,8 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
+import static org.niis.xroad.restapi.exceptions.DeviationCodes.ERROR_CA_CERT_PROCESSING;
+
 /**
  * Service that handles approved certificate authorities
  */
@@ -78,10 +82,10 @@ public class CertificateAuthorityService {
     private static final int CACHE_EVICT_RATE = 60000; // 1 min
 
     private final GlobalConfService globalConfService;
-    private final ServerConfService serverConfService;
     private final GlobalConfFacade globalConfFacade;
     private final ClientService clientService;
     private final SignerProxyFacade signerProxyFacade;
+    private final CurrentSecurityServerId currentSecurityServerId;
 
     /**
      * constructor
@@ -89,14 +93,14 @@ public class CertificateAuthorityService {
     @Autowired
     public CertificateAuthorityService(GlobalConfService globalConfService,
             GlobalConfFacade globalConfFacade,
-            ServerConfService serverConfService,
             ClientService clientService,
-            SignerProxyFacade signerProxyFacade) {
+            SignerProxyFacade signerProxyFacade,
+            CurrentSecurityServerId currentSecurityServerId) {
         this.globalConfService = globalConfService;
         this.globalConfFacade = globalConfFacade;
-        this.serverConfService = serverConfService;
         this.clientService = clientService;
         this.signerProxyFacade = signerProxyFacade;
+        this.currentSecurityServerId = currentSecurityServerId;
     }
 
     /**
@@ -139,14 +143,15 @@ public class CertificateAuthorityService {
      *                               false = only include top CAs
      * @throws InconsistentCaDataException if required CA data could not be extracted, for example due to OCSP
      * responses not being valid
-     * @return
+     * @return list of approved CAs
      */
     @Cacheable(GET_CERTIFICATE_AUTHORITIES_CACHE)
     public List<ApprovedCaDto> getCertificateAuthorities(KeyUsageInfo keyUsageInfo,
             boolean includeIntermediateCas) throws InconsistentCaDataException {
 
-        log.info("getCertificateAuthorities");
+        log.debug("getCertificateAuthorities");
         List<X509Certificate> caCerts = new ArrayList<>(globalConfService.getAllCaCertsForThisInstance());
+
         List<ApprovedCaDto> dtos = new ArrayList<>();
         // map of each subject - issuer DN pair for easy lookups
         Map<String, String> subjectsToIssuers = caCerts.stream().collect(
@@ -154,21 +159,30 @@ public class CertificateAuthorityService {
                         x509 -> x509.getSubjectDN().getName(),
                         x509 -> x509.getIssuerDN().getName()));
 
+        // we only fetch ocsp responses for intermediate approved CAs
+        // configured as approved CA and its issuer cert is also an approved CA
+        List<X509Certificate> filteredCerts = caCerts.stream()
+                .filter(cert -> subjectsToIssuers.containsKey(cert.getIssuerDN().getName()))
+                .collect(Collectors.toList());
+
         String[] base64EncodedOcspResponses;
         try {
-            String[] certHashes = CertUtils.getCertHashes(new ArrayList<>(caCerts));
+            String[] certHashes = CertUtils.getCertHashes(new ArrayList<>(filteredCerts));
             base64EncodedOcspResponses = signerProxyFacade.getOcspResponses(certHashes);
         } catch (Exception e) {
             throw new InconsistentCaDataException("failed to get read CA OCSP responses", e);
         }
-        if (caCerts.size() != base64EncodedOcspResponses.length) {
-            throw new InconsistentCaDataException("ocsp responses do not match ca certs");
+        if (filteredCerts.size() != base64EncodedOcspResponses.length) {
+            throw new InconsistentCaDataException(
+                    String.format("ocsp responses do not match ca certs %d vs %d",
+                            filteredCerts.size(), base64EncodedOcspResponses.length));
         }
 
         // build dtos
-        for (int i = 0; i < caCerts.size(); i++) {
-            dtos.add(buildCertificateAuthorityDto(caCerts.get(i),
-                    base64EncodedOcspResponses[i],
+        for (X509Certificate cert : caCerts) {
+            int idx = filteredCerts.indexOf(cert);
+            dtos.add(buildCertificateAuthorityDto(cert,
+                    (idx != -1) ? base64EncodedOcspResponses[idx] : null,
                     subjectsToIssuers));
         }
 
@@ -194,7 +208,7 @@ public class CertificateAuthorityService {
      * @param certificate CA certificate
      * @param base64EncodedOcspResponse OCSP response
      * @param subjectsToIssuers map linking all CA subject DNs to corresponding issuer DNs
-     * @return
+     * @return approved CA DTO
      * @throws InconsistentCaDataException if required CA data could not be extracted, for example due to OCSP
      * responses not being valid
      */
@@ -262,24 +276,25 @@ public class CertificateAuthorityService {
 
     /**
      * Return correct CertificateProfileInfo for given parameters
-     * @param caName
-     * @param keyUsageInfo
+     * @param caName name of the CA
+     * @param keyUsageInfo key usage
      * @param memberId member when key usage = signing, ignored otherwise
-     * @return
+     * @return CertificateProfileInfo
      * @throws CertificateAuthorityNotFoundException if matching CA was not found
      * @throws CertificateProfileInstantiationException if instantiation of certificate profile failed
      * @throws WrongKeyUsageException if attempted to read signing profile from authenticationOnly ca
      * @throws ClientNotFoundException if client with memberId was not found
      */
-    public CertificateProfileInfo getCertificateProfile(String caName, KeyUsageInfo keyUsageInfo, ClientId memberId)
+    public CertificateProfileInfo getCertificateProfile(String caName, KeyUsageInfo keyUsageInfo, ClientId memberId,
+            boolean isNewMember)
             throws CertificateAuthorityNotFoundException, CertificateProfileInstantiationException,
             WrongKeyUsageException, ClientNotFoundException {
         ApprovedCAInfo caInfo = getCertificateAuthorityInfo(caName);
         if (Boolean.TRUE.equals(caInfo.getAuthenticationOnly()) && KeyUsageInfo.SIGNING == keyUsageInfo) {
             throw new WrongKeyUsageException();
         }
-        if (keyUsageInfo == KeyUsageInfo.SIGNING) {
-            // validate that the member exists or has a subsystem on this server
+        if (keyUsageInfo == KeyUsageInfo.SIGNING && !isNewMember) {
+            // validate that the member exists or has a subsystem on this server - except when adding a new client
             if (!clientService.getLocalClientMemberIds().contains(memberId)) {
                 throw new ClientNotFoundException("client with id " + memberId + ", or subsystem for it, not found");
             }
@@ -290,10 +305,10 @@ public class CertificateAuthorityService {
         } catch (Exception e) {
             throw new CertificateProfileInstantiationException(e);
         }
-        SecurityServerId serverId = serverConfService.getSecurityServerId();
+        SecurityServerId serverId = currentSecurityServerId.getServerId();
 
         if (KeyUsageInfo.AUTHENTICATION == keyUsageInfo) {
-            String ownerName = globalConfFacade.getMemberName(serverConfService.getSecurityServerOwnerId());
+            String ownerName = globalConfFacade.getMemberName(serverId.getOwner());
             AuthCertificateProfileInfoParameters params = new AuthCertificateProfileInfoParameters(
                     serverId, ownerName);
             return provider.getAuthCertProfile(params);
@@ -328,7 +343,6 @@ public class CertificateAuthorityService {
      * Thrown when attempted to find CA certificate status and other details, but failed
      */
     public static class InconsistentCaDataException extends ServiceException {
-        public static final String ERROR_CA_CERT_PROCESSING = "ca_cert_status_processing_failure";
         public InconsistentCaDataException(String s, Throwable t) {
             super(s, t, new ErrorDeviation(ERROR_CA_CERT_PROCESSING));
         }

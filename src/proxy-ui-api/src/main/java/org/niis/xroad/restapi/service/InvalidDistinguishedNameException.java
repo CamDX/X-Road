@@ -1,5 +1,6 @@
 /**
  * The MIT License
+ * Copyright (c) 2019- Nordic Institute for Interoperability Solutions (NIIS)
  * Copyright (c) 2018 Estonian Information System Authority (RIA),
  * Nordic Institute for Interoperability Solutions (NIIS), Population Register Centre (VRK)
  * Copyright (c) 2015-2017 Estonian Information System Authority (RIA), Population Register Centre (VRK)
@@ -26,13 +27,13 @@ package org.niis.xroad.restapi.service;
 
 import org.niis.xroad.restapi.exceptions.ErrorDeviation;
 
+import static org.niis.xroad.restapi.exceptions.DeviationCodes.ERROR_INVALID_DISTINGUISHED_NAME;
+
 /**
  * Thrown when given DistinguishedName is invalid
  */
 public class InvalidDistinguishedNameException extends ServiceException {
-    public static final String INVALID_DISTINGUISHED_NAME = "invalid_distinguished_name";
-
     public InvalidDistinguishedNameException(Throwable t) {
-        super(t, new ErrorDeviation(INVALID_DISTINGUISHED_NAME));
+        super(t, new ErrorDeviation(ERROR_INVALID_DISTINGUISHED_NAME));
     }
 }

@@ -1,3 +1,28 @@
+<!--
+   The MIT License
+   Copyright (c) 2019- Nordic Institute for Interoperability Solutions (NIIS)
+   Copyright (c) 2018 Estonian Information System Authority (RIA),
+   Nordic Institute for Interoperability Solutions (NIIS), Population Register Centre (VRK)
+   Copyright (c) 2015-2017 Estonian Information System Authority (RIA), Population Register Centre (VRK)
+
+   Permission is hereby granted, free of charge, to any person obtaining a copy
+   of this software and associated documentation files (the "Software"), to deal
+   in the Software without restriction, including without limitation the rights
+   to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+   copies of the Software, and to permit persons to whom the Software is
+   furnished to do so, subject to the following conditions:
+
+   The above copyright notice and this permission notice shall be included in
+   all copies or substantial portions of the Software.
+
+   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+   IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+   FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+   AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+   LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+   OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+   THE SOFTWARE.
+ -->
 <template>
   <div class="pt-10">
     <v-card flat class="xrd-card">
@@ -18,7 +43,9 @@
             >
               {{ $t('systemParameters.configurationAnchor.action.download') }}
             </large-button>
-            <upload-configuration-anchor-dialog @uploaded="fetchConfigurationAnchor"/>
+            <upload-configuration-anchor-dialog
+              @uploaded="fetchConfigurationAnchor"
+            />
           </v-col>
         </v-row>
         <v-row no-gutters v-if="hasPermission(permissions.VIEW_ANCHOR)">
@@ -66,7 +93,10 @@
             </h3></v-col
           >
           <v-col class="text-right">
-            <add-timestamping-service-dialog :configured-timestamping-services="configuredTimestampingServices" @added="fetchConfiguredTimestampingServiced"/>
+            <add-timestamping-service-dialog
+              :configured-timestamping-services="configuredTimestampingServices"
+              @added="fetchConfiguredTimestampingServiced"
+            />
           </v-col>
         </v-row>
         <v-row no-gutters v-if="hasPermission(permissions.VIEW_TSPS)">
@@ -77,7 +107,7 @@
                   <th>
                     {{
                       $t(
-                        'systemParameters.timestampingServices.table.header.certificateHash',
+                        'systemParameters.timestampingServices.table.header.timestampingService',
                       )
                     }}
                   </th>
@@ -105,14 +135,25 @@
             </table>
           </v-col>
         </v-row>
-        <v-row no-gutters class="mt-10">
+        <v-row
+          no-gutters
+          class="mt-10"
+          v-if="
+            hasPermission(permissions.VIEW_APPROVED_CERTIFICATE_AUTHORITIES)
+          "
+        >
           <v-col
             ><h3>
               {{ $t('systemParameters.approvedCertificateAuthorities.title') }}
             </h3></v-col
           >
         </v-row>
-        <v-row no-gutters>
+        <v-row
+          no-gutters
+          v-if="
+            hasPermission(permissions.VIEW_APPROVED_CERTIFICATE_AUTHORITIES)
+          "
+        >
           <v-col>
             <table class="xrd-table">
               <thead>
@@ -181,7 +222,11 @@
 <script lang="ts">
 import Vue from 'vue';
 import LargeButton from '@/components/ui/LargeButton.vue';
-import { Anchor, CertificateAuthority, TimestampingService } from '@/types';
+import {
+  Anchor,
+  CertificateAuthority,
+  TimestampingService,
+} from '@/openapi-types';
 import * as api from '@/util/api';
 import { Permissions } from '@/global';
 import TimestampingServiceRow from '@/views/Settings/SystemParameters/TimestampingServiceRow.vue';
@@ -207,7 +252,9 @@ export default Vue.extend({
   },
   computed: {
     orderedCertificateAuthorities(): CertificateAuthority[] {
-      return this.certificateAuthorities.sort((authorityA, authorityB) =>
+      const temp = this.certificateAuthorities;
+
+      return temp.sort((authorityA, authorityB) =>
         authorityA.path.localeCompare(authorityB.path),
       );
     },
@@ -218,19 +265,21 @@ export default Vue.extend({
     },
     async fetchConfigurationAnchor() {
       return api
-        .get('/system/anchor')
+        .get<Anchor>('/system/anchor')
         .then((resp) => (this.configuratonAnchor = resp.data))
         .catch((error) => this.$store.dispatch('showError', error));
     },
     async fetchConfiguredTimestampingServiced() {
       return api
-        .get('/system/timestamping-services')
+        .get<TimestampingService[]>('/system/timestamping-services')
         .then((resp) => (this.configuredTimestampingServices = resp.data))
         .catch((error) => this.$store.dispatch('showError', error));
     },
     async fetchApprovedCertificateAuthorities() {
       return api
-        .get('/certificate-authorities?include_intermediate_cas=true')
+        .get<CertificateAuthority[]>(
+          '/certificate-authorities?include_intermediate_cas=true',
+        )
         .then((resp) => (this.certificateAuthorities = resp.data))
         .catch((error) => this.$store.dispatch('showError', error));
     },
@@ -246,9 +295,17 @@ export default Vue.extend({
     },
   },
   created(): void {
-    this.fetchConfigurationAnchor();
-    this.fetchConfiguredTimestampingServiced();
-    this.fetchApprovedCertificateAuthorities();
+    if (this.hasPermission(Permissions.VIEW_ANCHOR)) {
+      this.fetchConfigurationAnchor();
+    }
+
+    if (this.hasPermission(Permissions.VIEW_TSPS)) {
+      this.fetchConfiguredTimestampingServiced();
+    }
+
+    if (this.hasPermission(Permissions.VIEW_APPROVED_CERTIFICATE_AUTHORITIES)) {
+      this.fetchApprovedCertificateAuthorities();
+    }
   },
 });
 </script>

@@ -1,5 +1,6 @@
 /**
  * The MIT License
+ * Copyright (c) 2019- Nordic Institute for Interoperability Solutions (NIIS)
  * Copyright (c) 2018 Estonian Information System Authority (RIA),
  * Nordic Institute for Interoperability Solutions (NIIS), Population Register Centre (VRK)
  * Copyright (c) 2015-2017 Estonian Information System Authority (RIA), Population Register Centre (VRK)
@@ -34,6 +35,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.compress.archivers.tar.TarArchiveEntry;
 import org.apache.commons.compress.archivers.tar.TarArchiveOutputStream;
 import org.apache.commons.compress.compressors.gzip.GzipCompressorOutputStream;
+import org.niis.xroad.restapi.config.audit.AuditDataHelper;
 import org.niis.xroad.restapi.exceptions.DeviationAwareRuntimeException;
 import org.niis.xroad.restapi.exceptions.ErrorDeviation;
 import org.niis.xroad.restapi.repository.InternalTlsCertificateRepository;
@@ -49,6 +51,8 @@ import java.io.IOException;
 import java.security.cert.CertificateEncodingException;
 import java.security.cert.X509Certificate;
 
+import static org.niis.xroad.restapi.exceptions.DeviationCodes.ERROR_KEY_CERT_GENERATION_FAILED;
+
 /**
  * Operations related to internal tls certificates
  */
@@ -57,8 +61,6 @@ import java.security.cert.X509Certificate;
 @Transactional
 @PreAuthorize("isAuthenticated()")
 public class InternalTlsCertificateService {
-
-    public static final String KEY_CERT_GENERATION_FAILED = "key_and_cert_generation_failed";
     public static final String IMPORT_INTERNAL_CERT_FAILED = "import_internal_cert_failed";
 
     private static final String CERT_PEM_FILENAME = "./cert.pem";
@@ -66,6 +68,7 @@ public class InternalTlsCertificateService {
 
     private final ExternalProcessRunner externalProcessRunner;
     private final String generateCertScriptArgs;
+    private final AuditDataHelper auditDataHelper;
 
     @Setter
     private String generateCertScriptPath;
@@ -82,11 +85,13 @@ public class InternalTlsCertificateService {
     public InternalTlsCertificateService(InternalTlsCertificateRepository internalTlsCertificateRepository,
             ExternalProcessRunner externalProcessRunner,
             @Value("${script.generate-certificate.path}") String generateCertScriptPath,
-            @Value("${script.generate-certificate.args}") String generateCertScriptArgs) {
+            @Value("${script.generate-certificate.args}") String generateCertScriptArgs,
+            AuditDataHelper auditDataHelper) {
         this.internalTlsCertificateRepository = internalTlsCertificateRepository;
         this.externalProcessRunner = externalProcessRunner;
         this.generateCertScriptPath = generateCertScriptPath;
         this.generateCertScriptArgs = generateCertScriptArgs;
+        this.auditDataHelper = auditDataHelper;
     }
 
     public X509Certificate getInternalTlsCertificate() {
@@ -148,8 +153,11 @@ public class InternalTlsCertificateService {
                     generateCertScriptArgs.split("\\s+"));
         } catch (ProcessNotExecutableException | ProcessFailedException e) {
             log.error("Failed to generate internal TLS key and cert", e);
-            throw new DeviationAwareRuntimeException(e, new ErrorDeviation(KEY_CERT_GENERATION_FAILED));
+            throw new DeviationAwareRuntimeException(e, new ErrorDeviation(ERROR_KEY_CERT_GENERATION_FAILED));
         }
+        // audit log hash of generated cert
+        X509Certificate generatedCert = internalTlsCertificateRepository.getInternalTlsCertificate();
+        auditDataHelper.putCertificateHash(generatedCert);
     }
 
     /**
@@ -165,10 +173,12 @@ public class InternalTlsCertificateService {
         } catch (Exception e) {
             throw new InvalidCertificateException("cannot convert bytes to certificate", e);
         }
+        auditDataHelper.putCertificateHash(x509Certificate);
         try {
             CertUtils.writePemToFile(certificateBytes, internalCertPath);
             CertUtils.createPkcs12(internalKeyPath, internalCertPath, internalKeystorePath);
         } catch (Exception e) {
+            log.error("Failed to import internal TLS cert", e);
             throw new DeviationAwareRuntimeException("cannot import internal tls cert", e,
                     new ErrorDeviation(IMPORT_INTERNAL_CERT_FAILED));
         }

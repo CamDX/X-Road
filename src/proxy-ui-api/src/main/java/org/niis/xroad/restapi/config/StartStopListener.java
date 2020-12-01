@@ -1,5 +1,6 @@
 /**
  * The MIT License
+ * Copyright (c) 2019- Nordic Institute for Interoperability Solutions (NIIS)
  * Copyright (c) 2018 Estonian Information System Authority (RIA),
  * Nordic Institute for Interoperability Solutions (NIIS), Population Register Centre (VRK)
  * Copyright (c) 2015-2017 Estonian Information System Authority (RIA), Population Register Centre (VRK)
@@ -43,16 +44,16 @@ import org.springframework.stereotype.Component;
  */
 @Slf4j
 @Component
-//@Configuration
-public class StartStopListener implements ApplicationListener {
+public class StartStopListener implements ApplicationListener<ApplicationEvent> {
 
-    private static UIServices uiApiActorSystem;
+    private UIServices uiApiActorSystem;
 
-    private void stop() throws Exception {
-        log.debug("stop");
+    private synchronized void stop() throws Exception {
+        log.info("stop");
 
         if (uiApiActorSystem != null) {
             uiApiActorSystem.stop();
+            uiApiActorSystem = null;
         }
     }
 
@@ -64,13 +65,12 @@ public class StartStopListener implements ApplicationListener {
      * Maybe be called multiple times since ContextRefreshedEvent can happen multiple times
      * @throws Exception
      */
-    private void start() throws Exception {
-        log.debug("start");
+    private synchronized void start() {
+        log.info("start");
         if (uiApiActorSystem == null) {
             uiApiActorSystem = new UIServices("ProxyUIApi", "proxyuiapi");
+            SignerClient.init(uiApiActorSystem.getActorSystem(), signerIp);
         }
-
-        SignerClient.init(uiApiActorSystem.getActorSystem(), signerIp);
     }
 
 

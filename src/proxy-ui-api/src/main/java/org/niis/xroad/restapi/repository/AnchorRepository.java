@@ -1,5 +1,6 @@
 /**
  * The MIT License
+ * Copyright (c) 2019- Nordic Institute for Interoperability Solutions (NIIS)
  * Copyright (c) 2018 Estonian Information System Authority (RIA),
  * Nordic Institute for Interoperability Solutions (NIIS), Population Register Centre (VRK)
  * Copyright (c) 2015-2017 Estonian Information System Authority (RIA), Population Register Centre (VRK)
@@ -78,6 +79,11 @@ public class AnchorRepository {
      * @throws IOException if atomic save fails
      */
     public void saveAndReplace(File anchorFile) throws IOException {
-        AtomicSave.moveBetweenFilesystems(anchorFile.getAbsolutePath(), CONFIGURATION_ANCHOR_FILENAME);
+        try {
+            AtomicSave.moveBetweenFilesystems(anchorFile.getAbsolutePath(), CONFIGURATION_ANCHOR_FILENAME);
+        } catch (Exception e) {
+            log.error("Saving anchor failed", e);
+            throw e;
+        }
     }
 }

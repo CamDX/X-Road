@@ -1,5 +1,6 @@
 /**
  * The MIT License
+ * Copyright (c) 2019- Nordic Institute for Interoperability Solutions (NIIS)
  * Copyright (c) 2018 Estonian Information System Authority (RIA),
  * Nordic Institute for Interoperability Solutions (NIIS), Population Register Centre (VRK)
  * Copyright (c) 2015-2017 Estonian Information System Authority (RIA), Population Register Centre (VRK)
@@ -26,12 +27,12 @@ package org.niis.xroad.restapi.service;
 
 import org.niis.xroad.restapi.exceptions.ErrorDeviation;
 
+import static org.niis.xroad.restapi.exceptions.DeviationCodes.ERROR_CSR_NOT_FOUND;
+
 /**
  * Thrown if Certificate sign request was not found
  */
 public class CsrNotFoundException extends NotFoundException {
-    public static final String ERROR_CSR_NOT_FOUND = "csr_not_found";
-
     public CsrNotFoundException(String s) {
         super(s, createError());        }
 

@@ -1,5 +1,6 @@
 /**
  * The MIT License
+ * Copyright (c) 2019- Nordic Institute for Interoperability Solutions (NIIS)
  * Copyright (c) 2018 Estonian Information System Authority (RIA),
  * Nordic Institute for Interoperability Solutions (NIIS), Population Register Centre (VRK)
  * Copyright (c) 2015-2017 Estonian Information System Authority (RIA), Population Register Centre (VRK)
@@ -27,10 +28,10 @@ package org.niis.xroad.restapi.service;
 
 import org.niis.xroad.restapi.exceptions.ErrorDeviation;
 
-public class EndpointAlreadyExistsException extends ServiceException {
-    public static final String ERROR_EXISTING_ENDPOINT = "endpoint_already_exists";
+import static org.niis.xroad.restapi.exceptions.DeviationCodes.ERROR_EXISTING_ENDPOINT;
 
+public class EndpointAlreadyExistsException extends ServiceException {
     public EndpointAlreadyExistsException(String msg) {
-        super(new ErrorDeviation(ERROR_EXISTING_ENDPOINT, msg));
+        super(msg, new ErrorDeviation(ERROR_EXISTING_ENDPOINT));
     }
 }

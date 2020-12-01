@@ -1,5 +1,6 @@
 /**
  * The MIT License
+ * Copyright (c) 2019- Nordic Institute for Interoperability Solutions (NIIS)
  * Copyright (c) 2018 Estonian Information System Authority (RIA),
  * Nordic Institute for Interoperability Solutions (NIIS), Population Register Centre (VRK)
  * Copyright (c) 2015-2017 Estonian Information System Authority (RIA), Population Register Centre (VRK)
@@ -39,6 +40,8 @@ import org.springframework.util.StringUtils;
 import java.util.ArrayList;
 import java.util.List;
 
+import static org.niis.xroad.restapi.exceptions.DeviationCodes.ERROR_WSDL_VALIDATOR_NOT_EXECUTABLE;
+
 /**
  * WsdlValidator as done in X-Road addons: wsdlvalidator
  */
@@ -70,6 +73,7 @@ public class WsdlValidator {
         List<String> warnings = new ArrayList<>();
         // validator not set - this is ok since validator is optional
         if (StringUtils.isEmpty(getWsdlValidatorCommand())) {
+            log.warn("Skipping WSDL validator, command not set");
             return warnings;
         }
 
@@ -80,12 +84,25 @@ public class WsdlValidator {
         try {
             ExternalProcessRunner.ProcessResult processResult = externalProcessRunner
                     .executeAndThrowOnFailure(getWsdlValidatorCommand(), wsdlUrl);
+
+            logValidatorOutput(processResult.getProcessOutput());
             return processResult.getProcessOutput();
         } catch (ProcessNotExecutableException e) {
             throw new WsdlValidatorNotExecutableException(e);
         } catch (ProcessFailedException e) {
+            if (e.getErrorDeviation() != null) {
+                logValidatorOutput(e.getErrorDeviation().getMetadata());
+            }
             throw new WsdlValidationFailedException(e.getErrorDeviation().getMetadata());
         }
+    }
+
+    private void logValidatorOutput(List<String> processOutput) {
+        log.debug(" --- WSDL validator console output - START --- ");
+        if (processOutput != null && log.isDebugEnabled()) {
+            log.debug(ExternalProcessRunner.processOutputToString(processOutput));
+        }
+        log.debug(" --- WSDL validator console output - END --- ");
     }
 
     /**
@@ -101,9 +118,6 @@ public class WsdlValidator {
      * Thrown if WSDL validation fails
      */
     public static class WsdlValidatorNotExecutableException extends WsdlValidationException {
-
-        public static final String ERROR_WSDL_VALIDATOR_NOT_EXECUTABLE = "wsdl_validator_not_executable";
-
         public WsdlValidatorNotExecutableException(Throwable t) {
             super(t, new ErrorDeviation(ERROR_WSDL_VALIDATOR_NOT_EXECUTABLE));
         }

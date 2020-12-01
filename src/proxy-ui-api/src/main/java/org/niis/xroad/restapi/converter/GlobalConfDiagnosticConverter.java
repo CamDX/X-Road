@@ -1,5 +1,6 @@
 /**
  * The MIT License
+ * Copyright (c) 2019- Nordic Institute for Interoperability Solutions (NIIS)
  * Copyright (c) 2018 Estonian Information System Authority (RIA),
  * Nordic Institute for Interoperability Solutions (NIIS), Population Register Centre (VRK)
  * Copyright (c) 2015-2017 Estonian Information System Authority (RIA), Population Register Centre (VRK)
@@ -29,7 +30,6 @@ import ee.ria.xroad.common.DiagnosticsStatus;
 import org.niis.xroad.restapi.openapi.model.ConfigurationStatus;
 import org.niis.xroad.restapi.openapi.model.DiagnosticStatusClass;
 import org.niis.xroad.restapi.openapi.model.GlobalConfDiagnostics;
-import org.niis.xroad.restapi.util.FormatUtils;
 import org.springframework.stereotype.Component;
 
 import java.util.Optional;
@@ -48,10 +48,8 @@ public class GlobalConfDiagnosticConverter {
         Optional<DiagnosticStatusClass> statusClass = DiagnosticStatusClassMapping.map(
                 diagnosticsStatus.getReturnCode());
         globalConfDiagnostics.setStatusClass(statusClass.orElse(null));
-        globalConfDiagnostics.setPrevUpdateAt(FormatUtils.fromLocalTimeToOffsetDateTime(
-                diagnosticsStatus.getPrevUpdate(), true));
-        globalConfDiagnostics.setNextUpdateAt(FormatUtils.fromLocalTimeToOffsetDateTime(
-                diagnosticsStatus.getNextUpdate(), false));
+        globalConfDiagnostics.setPrevUpdateAt(diagnosticsStatus.getPrevUpdate());
+        globalConfDiagnostics.setNextUpdateAt(diagnosticsStatus.getNextUpdate());
 
         return globalConfDiagnostics;
     }

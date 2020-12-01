@@ -1,5 +1,6 @@
 /**
  * The MIT License
+ * Copyright (c) 2019- Nordic Institute for Interoperability Solutions (NIIS)
  * Copyright (c) 2018 Estonian Information System Authority (RIA),
  * Nordic Institute for Interoperability Solutions (NIIS), Population Register Centre (VRK)
  * Copyright (c) 2015-2017 Estonian Information System Authority (RIA), Population Register Centre (VRK)
@@ -32,12 +33,12 @@ import org.springframework.core.io.Resource;
 import java.io.IOException;
 import java.io.InputStream;
 
+import static org.niis.xroad.restapi.exceptions.DeviationCodes.ERROR_RESOURCE_READ;
+
 /**
  * Resource utils
  */
 public final class ResourceUtils {
-    public static final String ERROR_RESOURCE_READ = "resource_read_failed";
-
     private ResourceUtils() {
         // noop
     }

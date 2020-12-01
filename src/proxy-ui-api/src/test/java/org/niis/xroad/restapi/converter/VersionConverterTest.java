@@ -1,5 +1,6 @@
 /**
  * The MIT License
+ * Copyright (c) 2019- Nordic Institute for Interoperability Solutions (NIIS)
  * Copyright (c) 2018 Estonian Information System Authority (RIA),
  * Nordic Institute for Interoperability Solutions (NIIS), Population Register Centre (VRK)
  * Copyright (c) 2015-2017 Estonian Information System Authority (RIA), Population Register Centre (VRK)
@@ -26,12 +27,7 @@ package org.niis.xroad.restapi.converter;
 
 import org.junit.Before;
 import org.junit.Test;
-import org.junit.runner.RunWith;
 import org.niis.xroad.restapi.openapi.model.Version;
-import org.niis.xroad.restapi.service.VersionService;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.mock.mockito.MockBean;
-import org.springframework.test.context.junit4.SpringRunner;
 
 import static org.junit.Assert.assertEquals;
 import static org.mockito.Mockito.when;
@@ -39,12 +35,7 @@ import static org.mockito.Mockito.when;
 /**
  * Test VersionConverter
  */
-@RunWith(SpringRunner.class)
-@SpringBootTest
-public class VersionConverterTest {
-
-    @MockBean
-    private VersionService versionService;
+public class VersionConverterTest extends AbstractConverterTestContext {
 
     private VersionConverter versionConverter;
 

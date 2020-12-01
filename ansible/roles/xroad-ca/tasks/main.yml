@@ -4,17 +4,16 @@
     msg: "This playbook only supports Ubuntu"
   when: ansible_os_family != "Debian"
   
-- name: Update all packages to the latest version
-  apt:
-    update_cache: yes
-
 - name: install required packages
-  package:
-      name: "{{ item }}"
+  apt:
+      name: "{{ items }}"
       state: present
-  with_items:
-    - "acl"
-    - "nginx-light"
+      update_cache: yes
+  vars:
+    items:
+      - "acl"
+      - "nginx-light"
+      - "openssl"
 
 - name: group ca
   group:
@@ -47,15 +46,15 @@
     - "etc"
     - "usr"
 
-- name: copy root user directories for bionic
+- name: copy root user directories for ubuntu
   copy:
-    src: "bionic-files/{{ item }}"
+    src: "ubuntu-files/{{ item }}"
     dest: /
     group: "root"
     owner: "root"
   with_items:
     - "lib"
-  when: ansible_distribution_release == "bionic"
+  when: ansible_distribution_release == "bionic" or ansible_distribution_release == "focal"
 
 - name: copy ca group directories
   copy:

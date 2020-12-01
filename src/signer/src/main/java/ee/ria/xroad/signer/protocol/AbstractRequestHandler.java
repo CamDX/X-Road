@@ -1,5 +1,6 @@
 /**
  * The MIT License
+ * Copyright (c) 2019- Nordic Institute for Interoperability Solutions (NIIS)
  * Copyright (c) 2018 Estonian Information System Authority (RIA),
  * Nordic Institute for Interoperability Solutions (NIIS), Population Register Centre (VRK)
  * Copyright (c) 2015-2017 Estonian Information System Authority (RIA), Population Register Centre (VRK)
@@ -50,15 +51,18 @@ public abstract class AbstractRequestHandler<T> extends UntypedAbstractActor {
     private static final Object NOTHING = null;
 
     @Override
-    public void onReceive(Object message) throws Exception {
-        log.trace("onReceive({})", message);
+    public void onReceive(Object message) {
+        if (log.isTraceEnabled()) {
+            log.trace("onReceive({}) from {}", message, sender());
+        }
         try {
             Object result = handle((T) message);
             if (result != nothing()) {
                 if (result instanceof Exception) {
                     handleError(translateException((Exception) result));
                 } else if (hasSender()) {
-                    getSender().tell(result, getSelf());
+                    //use parent as sender (avoids leaking the temp request handler ref)
+                    getSender().tell(result, context().parent());
                 }
             }
         } catch (ClassCastException e) {
@@ -90,7 +94,8 @@ public abstract class AbstractRequestHandler<T> extends UntypedAbstractActor {
         log.error("Error in request handler", e);
 
         if (hasSender()) {
-            getSender().tell(e.withPrefix(SIGNER_X), getSelf());
+            //use parent as sender (avoids leaking the temp request handler ref)
+            getSender().tell(e.withPrefix(SIGNER_X), context().parent());
         }
     }
 

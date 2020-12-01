@@ -1,5 +1,6 @@
 /**
  * The MIT License
+ * Copyright (c) 2019- Nordic Institute for Interoperability Solutions (NIIS)
  * Copyright (c) 2018 Estonian Information System Authority (RIA),
  * Nordic Institute for Interoperability Solutions (NIIS), Population Register Centre (VRK)
  * Copyright (c) 2015-2017 Estonian Information System Authority (RIA), Population Register Centre (VRK)
@@ -24,29 +25,24 @@
  */
 package org.niis.xroad.restapi.openapi;
 
-import lombok.extern.slf4j.Slf4j;
 import org.junit.Before;
 import org.junit.Test;
-import org.junit.runner.RunWith;
 import org.niis.xroad.restapi.dto.BackupFile;
 import org.niis.xroad.restapi.exceptions.WarningDeviation;
 import org.niis.xroad.restapi.openapi.model.Backup;
+import org.niis.xroad.restapi.openapi.model.TokensLoggedOut;
 import org.niis.xroad.restapi.service.BackupFileNotFoundException;
-import org.niis.xroad.restapi.service.BackupService;
 import org.niis.xroad.restapi.service.InvalidBackupFileException;
 import org.niis.xroad.restapi.service.InvalidFilenameException;
+import org.niis.xroad.restapi.service.ProcessFailedException;
+import org.niis.xroad.restapi.service.RestoreProcessFailedException;
 import org.niis.xroad.restapi.service.UnhandledWarningsException;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.jdbc.AutoConfigureTestDatabase;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.core.io.Resource;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.security.test.context.support.WithMockUser;
-import org.springframework.test.context.junit4.SpringRunner;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.nio.charset.StandardCharsets;
 import java.time.ZoneOffset;
@@ -57,25 +53,22 @@ import java.util.List;
 
 import static junit.framework.TestCase.fail;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.when;
+import static org.niis.xroad.restapi.exceptions.DeviationCodes.ERROR_BACKUP_FILE_NOT_FOUND;
+import static org.niis.xroad.restapi.exceptions.DeviationCodes.ERROR_BACKUP_RESTORE_PROCESS_FAILED;
 
 /**
  * Test BackupsApiController
  */
-@RunWith(SpringRunner.class)
-@SpringBootTest
-@AutoConfigureTestDatabase
-@Transactional
-@Slf4j
-public class BackupsApiControllerTest {
-
-    @MockBean
-    BackupService backupService;
+public class BackupsApiControllerTest extends AbstractApiControllerTestContext {
 
     @Autowired
-    private BackupsApiController backupsApiController;
+    BackupsApiController backupsApiController;
 
     private static final String BACKUP_FILE_1_NAME = "ss-automatic-backup-2020_02_19_031502.tar";
 
@@ -99,7 +92,8 @@ public class BackupsApiControllerTest {
         BackupFile bf2 = new BackupFile(BACKUP_FILE_2_NAME);
         bf2.setCreatedAt(new Date(BACKUP_FILE_2_CREATED_AT_MILLIS).toInstant().atOffset(ZoneOffset.UTC));
 
-        when(backupService.getBackupFiles()).thenReturn(new ArrayList<>(Arrays.asList(bf1, bf2)));
+        doReturn(new ArrayList<>(Arrays.asList(bf1, bf2))).when(backupService).getBackupFiles();
+        doReturn(false).when(tokenService).hasHardwareTokens();
     }
 
     @Test
@@ -144,7 +138,8 @@ public class BackupsApiControllerTest {
     @Test
     @WithMockUser(authorities = { "BACKUP_CONFIGURATION" })
     public void deleteBackup() {
-        ResponseEntity<Void> response = backupsApiController.deleteBackup(BACKUP_FILE_1_NAME);
+        ResponseEntity<Void> response = backupsApiController
+                .deleteBackup(BACKUP_FILE_1_NAME);
         assertEquals(HttpStatus.NO_CONTENT, response.getStatusCode());
 
     }
@@ -170,7 +165,8 @@ public class BackupsApiControllerTest {
         byte[] bytes = "teststring".getBytes(StandardCharsets.UTF_8);
         when(backupService.readBackupFile(BACKUP_FILE_1_NAME)).thenReturn(bytes);
 
-        ResponseEntity<Resource> response = backupsApiController.downloadBackup(BACKUP_FILE_1_NAME);
+        ResponseEntity<Resource> response = backupsApiController
+                .downloadBackup(BACKUP_FILE_1_NAME);
         Resource backup = response.getBody();
         assertEquals(HttpStatus.OK, response.getStatusCode());
         assertEquals(bytes.length, backup.contentLength());
@@ -184,7 +180,8 @@ public class BackupsApiControllerTest {
         doThrow(new BackupFileNotFoundException("")).when(backupService).readBackupFile(filename);
 
         try {
-            ResponseEntity<Resource> response = backupsApiController.downloadBackup(filename);
+            ResponseEntity<Resource> response = backupsApiController
+                    .downloadBackup(filename);
             fail("should throw ResourceNotFoundException");
         } catch (ResourceNotFoundException expected) {
             // success
@@ -266,6 +263,64 @@ public class BackupsApiControllerTest {
             fail("should throw BadRequestException");
         } catch (BadRequestException expected) {
             // success
+        }
+    }
+
+    @Test
+    @WithMockUser(authorities = { "RESTORE_CONFIGURATION" })
+    public void restoreFromBackup() {
+        ResponseEntity<TokensLoggedOut> response = backupsApiController
+                .restoreBackup(BACKUP_FILE_1_NAME);
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        TokensLoggedOut tokensLoggedOut = response.getBody();
+        assertFalse(tokensLoggedOut.getHsmTokensLoggedOut());
+    }
+
+    @Test
+    @WithMockUser(authorities = { "RESTORE_CONFIGURATION" })
+    public void restoreFromBackupWithLoggedOutTokens() {
+        when(tokenService.hasHardwareTokens()).thenReturn(true);
+        ResponseEntity<TokensLoggedOut> response = backupsApiController
+                .restoreBackup(BACKUP_FILE_1_NAME);
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        TokensLoggedOut tokensLoggedOut = response.getBody();
+        assertTrue(tokensLoggedOut.getHsmTokensLoggedOut());
+    }
+
+    @Test
+    @WithMockUser(authorities = { "RESTORE_CONFIGURATION" })
+    public void restoreFromBackupNotFound() throws Exception {
+        doThrow(new BackupFileNotFoundException("")).when(restoreService).restoreFromBackup(any());
+        try {
+            backupsApiController.restoreBackup(BACKUP_FILE_1_NAME);
+            fail("should throw BadRequestException");
+        } catch (BadRequestException e) {
+            assertEquals(ERROR_BACKUP_FILE_NOT_FOUND, e.getErrorDeviation().getCode());
+        }
+    }
+
+    @Test
+    @WithMockUser(authorities = { "RESTORE_CONFIGURATION" })
+    public void restoreFromBackupInterrupted() throws Exception {
+        doThrow(new InterruptedException()).when(restoreService).restoreFromBackup(any());
+        try {
+            backupsApiController.restoreBackup(BACKUP_FILE_1_NAME);
+            fail("should throw InternalServerErrorException");
+        } catch (InternalServerErrorException e) {
+            // expected
+        }
+    }
+
+    @Test
+    @WithMockUser(authorities = { "RESTORE_CONFIGURATION" })
+    public void restoreFromBackupFailed() throws Exception {
+        doThrow(new RestoreProcessFailedException(new ProcessFailedException("process failed"), "restore failed"))
+                .when(restoreService).restoreFromBackup(any());
+        try {
+            backupsApiController.restoreBackup(BACKUP_FILE_1_NAME);
+            fail("should throw InternalServerErrorException");
+        } catch (InternalServerErrorException e) {
+            assertEquals(ERROR_BACKUP_RESTORE_PROCESS_FAILED, e.getErrorDeviation().getCode());
         }
     }
 }

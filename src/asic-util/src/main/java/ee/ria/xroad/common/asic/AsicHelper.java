@@ -1,5 +1,6 @@
 /**
  * The MIT License
+ * Copyright (c) 2019- Nordic Institute for Interoperability Solutions (NIIS)
  * Copyright (c) 2018 Estonian Information System Authority (RIA),
  * Nordic Institute for Interoperability Solutions (NIIS), Population Register Centre (VRK)
  * Copyright (c) 2015-2017 Estonian Information System Authority (RIA), Population Register Centre (VRK)
@@ -63,7 +64,7 @@ import static ee.ria.xroad.common.asic.AsicContainerEntries.ENTRY_TS_HASH_CHAIN_
 import static ee.ria.xroad.common.asic.AsicContainerEntries.MIMETYPE;
 import static ee.ria.xroad.common.util.CryptoUtils.decodeBase64;
 import static ee.ria.xroad.common.util.CryptoUtils.encodeBase64;
-import static org.apache.commons.lang.StringUtils.isBlank;
+import static org.apache.commons.lang3.StringUtils.isBlank;
 
 /**
  * Utility methods for dealing wit ASiC containers.

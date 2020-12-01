@@ -1,5 +1,6 @@
 /**
  * The MIT License
+ * Copyright (c) 2019- Nordic Institute for Interoperability Solutions (NIIS)
  * Copyright (c) 2018 Estonian Information System Authority (RIA),
  * Nordic Institute for Interoperability Solutions (NIIS), Population Register Centre (VRK)
  * Copyright (c) 2015-2017 Estonian Information System Authority (RIA), Population Register Centre (VRK)
@@ -63,10 +64,11 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertThat;
 import static org.junit.Assert.assertTrue;
-import static org.powermock.api.mockito.PowerMockito.mock;
-import static org.powermock.api.mockito.PowerMockito.when;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 /**
  * Tests for {@link MergeOntoFileTokensStrategy}
@@ -637,7 +639,7 @@ public class MergeOntoFileTokenStrategyTest {
 
         assertEquals("OCSP response 1 does not match", resp1, file1.getOcspResponse());
         assertEquals("OCSP response 2 does not match", resp2, file2.getOcspResponse());
-        assertNotEquals("OCSP response 3 not empty", file3.getOcspResponse());
+        assertNull("OCSP response 3 not empty", file3.getOcspResponse());
 
     }
 

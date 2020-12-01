@@ -1,5 +1,6 @@
 /**
  * The MIT License
+ * Copyright (c) 2019- Nordic Institute for Interoperability Solutions (NIIS)
  * Copyright (c) 2018 Estonian Information System Authority (RIA),
  * Nordic Institute for Interoperability Solutions (NIIS), Population Register Centre (VRK)
  * Copyright (c) 2015-2017 Estonian Information System Authority (RIA), Population Register Centre (VRK)
@@ -35,6 +36,9 @@ import ee.ria.xroad.common.identifier.XRoadObjectType;
 import ee.ria.xroad.signer.protocol.dto.CertificateInfo;
 
 import lombok.extern.slf4j.Slf4j;
+import org.niis.xroad.restapi.config.audit.AuditDataHelper;
+import org.niis.xroad.restapi.config.audit.AuditEventMethod;
+import org.niis.xroad.restapi.controller.ServiceClientHelper;
 import org.niis.xroad.restapi.converter.AccessRightConverter;
 import org.niis.xroad.restapi.converter.CertificateDetailsConverter;
 import org.niis.xroad.restapi.converter.ClientConverter;
@@ -44,9 +48,12 @@ import org.niis.xroad.restapi.converter.ServiceClientConverter;
 import org.niis.xroad.restapi.converter.ServiceClientIdentifierConverter;
 import org.niis.xroad.restapi.converter.ServiceClientTypeMapping;
 import org.niis.xroad.restapi.converter.ServiceDescriptionConverter;
+import org.niis.xroad.restapi.converter.ServiceTypeMapping;
 import org.niis.xroad.restapi.converter.TokenCertificateConverter;
+import org.niis.xroad.restapi.converter.comparator.ClientSortingComparator;
+import org.niis.xroad.restapi.converter.comparator.ServiceClientSortingComparator;
+import org.niis.xroad.restapi.dto.ServiceClientAccessRightDto;
 import org.niis.xroad.restapi.dto.ServiceClientDto;
-import org.niis.xroad.restapi.dto.ServiceClientIdentifierDto;
 import org.niis.xroad.restapi.exceptions.ErrorDeviation;
 import org.niis.xroad.restapi.openapi.model.AccessRight;
 import org.niis.xroad.restapi.openapi.model.AccessRights;
@@ -73,15 +80,15 @@ import org.niis.xroad.restapi.service.CertificateNotFoundException;
 import org.niis.xroad.restapi.service.ClientNotFoundException;
 import org.niis.xroad.restapi.service.ClientService;
 import org.niis.xroad.restapi.service.GlobalConfOutdatedException;
-import org.niis.xroad.restapi.service.IdentifierNotFoundException;
+import org.niis.xroad.restapi.service.InvalidServiceUrlException;
 import org.niis.xroad.restapi.service.InvalidUrlException;
-import org.niis.xroad.restapi.service.LocalGroupNotFoundException;
 import org.niis.xroad.restapi.service.LocalGroupService;
 import org.niis.xroad.restapi.service.MissingParameterException;
 import org.niis.xroad.restapi.service.OrphanRemovalService;
 import org.niis.xroad.restapi.service.ServiceClientNotFoundException;
 import org.niis.xroad.restapi.service.ServiceClientService;
 import org.niis.xroad.restapi.service.ServiceDescriptionService;
+import org.niis.xroad.restapi.service.ServiceNotFoundException;
 import org.niis.xroad.restapi.service.TokenService;
 import org.niis.xroad.restapi.service.UnhandledWarningsException;
 import org.niis.xroad.restapi.util.ResourceUtils;
@@ -99,25 +106,42 @@ import org.springframework.web.bind.annotation.InitBinder;
 import org.springframework.web.bind.annotation.RequestMapping;
 
 import java.security.cert.CertificateException;
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 
 import static java.util.stream.Collectors.toList;
+import static org.niis.xroad.restapi.config.audit.RestApiAuditEvent.ADD_CLIENT;
+import static org.niis.xroad.restapi.config.audit.RestApiAuditEvent.ADD_CLIENT_INTERNAL_CERT;
+import static org.niis.xroad.restapi.config.audit.RestApiAuditEvent.ADD_LOCAL_GROUP;
+import static org.niis.xroad.restapi.config.audit.RestApiAuditEvent.ADD_SERVICE_CLIENT_ACCESS_RIGHTS;
+import static org.niis.xroad.restapi.config.audit.RestApiAuditEvent.ADD_SERVICE_DESCRIPTION;
+import static org.niis.xroad.restapi.config.audit.RestApiAuditEvent.DELETE_CLIENT;
+import static org.niis.xroad.restapi.config.audit.RestApiAuditEvent.DELETE_CLIENT_INTERNAL_CERT;
+import static org.niis.xroad.restapi.config.audit.RestApiAuditEvent.DELETE_ORPHANS;
+import static org.niis.xroad.restapi.config.audit.RestApiAuditEvent.REGISTER_CLIENT;
+import static org.niis.xroad.restapi.config.audit.RestApiAuditEvent.REMOVE_SERVICE_CLIENT_ACCESS_RIGHTS;
+import static org.niis.xroad.restapi.config.audit.RestApiAuditEvent.SEND_OWNER_CHANGE_REQ;
+import static org.niis.xroad.restapi.config.audit.RestApiAuditEvent.SET_CONNECTION_TYPE;
+import static org.niis.xroad.restapi.config.audit.RestApiAuditEvent.UNREGISTER_CLIENT;
+import static org.niis.xroad.restapi.config.audit.RestApiAuditProperty.DISABLED;
+import static org.niis.xroad.restapi.config.audit.RestApiAuditProperty.REFRESHED_DATE;
+import static org.niis.xroad.restapi.config.audit.RestApiAuditProperty.UPLOAD_FILE_NAME;
+import static org.niis.xroad.restapi.exceptions.DeviationCodes.ERROR_INVALID_CERT;
+import static org.niis.xroad.restapi.exceptions.DeviationCodes.ERROR_WSDL_VALIDATOR_INTERRUPTED;
 import static org.niis.xroad.restapi.openapi.ApiUtil.createCreatedResponse;
-import static org.niis.xroad.restapi.openapi.ServiceDescriptionsApiController.WSDL_VALIDATOR_INTERRUPTED;
 
 /**
  * clients api
  */
 @Controller
-@RequestMapping("/api")
+@RequestMapping(ApiUtil.API_V1_PREFIX)
 @Slf4j
 @PreAuthorize("denyAll")
 public class ClientsApiController implements ClientsApi {
-    public static final String ERROR_INVALID_CERT = "invalid_cert";
-
     private final ClientConverter clientConverter;
     private final ClientService clientService;
     private final LocalGroupConverter localGroupConverter;
@@ -132,7 +156,10 @@ public class ClientsApiController implements ClientsApi {
     private final ServiceClientConverter serviceClientConverter;
     private final AccessRightConverter accessRightConverter;
     private final ServiceClientService serviceClientService;
-    private final ServiceClientIdentifierConverter serviceClientIdentifierConverter;
+    private final ServiceClientHelper serviceClientHelper;
+    private final AuditDataHelper auditDataHelper;
+    private final ServiceClientSortingComparator serviceClientSortingComparator;
+    private final ClientSortingComparator clientSortingComparator;
 
     /**
      * ClientsApiController constructor
@@ -147,7 +174,9 @@ public class ClientsApiController implements ClientsApi {
             TokenCertificateConverter tokenCertificateConverter,
             OrphanRemovalService orphanRemovalService, ServiceClientConverter serviceClientConverter,
             AccessRightConverter accessRightConverter, ServiceClientService serviceClientService,
-            ServiceClientIdentifierConverter serviceClientIdentifierConverter) {
+            ServiceClientHelper serviceClientHelper,
+            ServiceClientIdentifierConverter serviceClientIdentifierConverter,
+            AuditDataHelper auditDataHelper) {
         this.clientService = clientService;
         this.tokenService = tokenService;
         this.clientConverter = clientConverter;
@@ -162,7 +191,10 @@ public class ClientsApiController implements ClientsApi {
         this.serviceClientConverter = serviceClientConverter;
         this.accessRightConverter = accessRightConverter;
         this.serviceClientService = serviceClientService;
-        this.serviceClientIdentifierConverter = serviceClientIdentifierConverter;
+        this.serviceClientHelper = serviceClientHelper;
+        this.auditDataHelper = auditDataHelper;
+        this.serviceClientSortingComparator = new ServiceClientSortingComparator();
+        this.clientSortingComparator = new ClientSortingComparator();
     }
 
     /**
@@ -186,6 +218,7 @@ public class ClientsApiController implements ClientsApi {
         List<Client> clients = clientConverter.convert(clientService.findClients(name,
                 instance, memberClass, memberCode, subsystemCode, unboxedShowMembers, unboxedInternalSearch,
                 localValidSignCert, excludeLocal));
+        Collections.sort(clients, clientSortingComparator);
         return new ResponseEntity<>(clients, HttpStatus.OK);
     }
 
@@ -231,6 +264,7 @@ public class ClientsApiController implements ClientsApi {
      */
     @PreAuthorize("hasAuthority('EDIT_CLIENT_INTERNAL_CONNECTION_TYPE')")
     @Override
+    @AuditEventMethod(event = SET_CONNECTION_TYPE)
     public ResponseEntity<Client> updateClient(String encodedId, ConnectionTypeWrapper connectionTypeWrapper) {
         if (connectionTypeWrapper == null || connectionTypeWrapper.getConnectionType() == null) {
             throw new BadRequestException();
@@ -250,8 +284,14 @@ public class ClientsApiController implements ClientsApi {
 
     @Override
     @PreAuthorize("hasAuthority('ADD_CLIENT_INTERNAL_CERT')")
+    @AuditEventMethod(event = ADD_CLIENT_INTERNAL_CERT)
     public ResponseEntity<CertificateDetails> addClientTlsCertificate(String encodedId,
             Resource body) {
+        // there's no filename since we only get a binary application/octet-stream.
+        // Have audit log anyway (null behaves as no-op) in case different content type is added later
+        String filename = body.getFilename();
+        auditDataHelper.put(UPLOAD_FILE_NAME, filename);
+
         byte[] certificateBytes = ResourceUtils.springResourceToBytesOrThrowBadRequest(body);
         ClientId clientId = clientConverter.convertId(encodedId);
         CertificateType certificateType = null;
@@ -271,6 +311,7 @@ public class ClientsApiController implements ClientsApi {
 
     @Override
     @PreAuthorize("hasAuthority('DELETE_CLIENT_INTERNAL_CERT')")
+    @AuditEventMethod(event = DELETE_CLIENT_INTERNAL_CERT)
     public ResponseEntity<Void> deleteClientTlsCertificate(String encodedId, String hash) {
         ClientId clientId = clientConverter.convertId(encodedId);
         try {
@@ -311,6 +352,7 @@ public class ClientsApiController implements ClientsApi {
 
     @Override
     @PreAuthorize("hasAuthority('ADD_LOCAL_GROUP')")
+    @AuditEventMethod(event = ADD_LOCAL_GROUP)
     public ResponseEntity<LocalGroup> addClientLocalGroup(String id, LocalGroupAdd localGroupAdd) {
         ClientType clientType = getClientType(id);
         LocalGroupType localGroupType = null;
@@ -331,7 +373,9 @@ public class ClientsApiController implements ClientsApi {
     public ResponseEntity<List<LocalGroup>> getClientLocalGroups(String encodedId) {
         ClientType clientType = getClientType(encodedId);
         List<LocalGroupType> localGroupTypes = clientService.getLocalClientLocalGroups(clientType.getIdentifier());
-        return new ResponseEntity<>(localGroupConverter.convert(localGroupTypes), HttpStatus.OK);
+        List<LocalGroup> localGroups = localGroupConverter.convert(localGroupTypes);
+        localGroups.sort(Comparator.comparing(LocalGroup::getCode, String.CASE_INSENSITIVE_ORDER));
+        return new ResponseEntity<>(localGroups, HttpStatus.OK);
     }
 
     @Override
@@ -346,6 +390,7 @@ public class ClientsApiController implements ClientsApi {
 
     @Override
     @PreAuthorize("hasAnyAuthority('ADD_WSDL', 'ADD_OPENAPI3')")
+    @AuditEventMethod(event = ADD_SERVICE_DESCRIPTION)
     public ResponseEntity<ServiceDescription> addClientServiceDescription(String id,
             ServiceDescriptionAdd serviceDescription) {
         ClientId clientId = clientConverter.convertId(id);
@@ -353,13 +398,17 @@ public class ClientsApiController implements ClientsApi {
         boolean ignoreWarnings = serviceDescription.getIgnoreWarnings();
         String restServiceCode = serviceDescription.getRestServiceCode();
 
+        // audit logging from controller works better here since logic is split into 3 different methods
+        auditDataHelper.put(clientId);
+        auditDataHelper.putServiceDescriptionUrl(url, ServiceTypeMapping.map(serviceDescription.getType()).get());
+
         ServiceDescriptionType addedServiceDescriptionType = null;
         if (serviceDescription.getType() == ServiceType.WSDL) {
             try {
                 addedServiceDescriptionType = serviceDescriptionService.addWsdlServiceDescription(
                         clientId, url, ignoreWarnings);
-            } catch (WsdlParser.WsdlNotFoundException | UnhandledWarningsException
-                    | InvalidUrlException | InvalidWsdlException e) {
+            } catch (WsdlParser.WsdlNotFoundException | UnhandledWarningsException | InvalidUrlException
+                    | InvalidWsdlException | InvalidServiceUrlException e) {
                 // deviation data (errorcode + warnings) copied
                 throw new BadRequestException(e);
             } catch (ClientNotFoundException e) {
@@ -370,7 +419,7 @@ public class ClientsApiController implements ClientsApi {
                 // deviation data (errorcode + warnings) copied
                 throw new ConflictException(e);
             } catch (InterruptedException e) {
-                throw new InternalServerErrorException(new ErrorDeviation(WSDL_VALIDATOR_INTERRUPTED));
+                throw new InternalServerErrorException(new ErrorDeviation(ERROR_WSDL_VALIDATOR_INTERRUPTED));
             }
         } else if (serviceDescription.getType() == ServiceType.OPENAPI3) {
             try {
@@ -400,6 +449,10 @@ public class ClientsApiController implements ClientsApi {
         }
         ServiceDescription addedServiceDescription = serviceDescriptionConverter.convert(
                 addedServiceDescriptionType);
+
+        auditDataHelper.put(DISABLED, addedServiceDescription.getDisabled());
+        auditDataHelper.putDateTime(REFRESHED_DATE, addedServiceDescription.getRefreshedAt());
+
         return createCreatedResponse("/api/service-descriptions/{id}", addedServiceDescription,
                 addedServiceDescription.getId());
     }
@@ -421,9 +474,9 @@ public class ClientsApiController implements ClientsApi {
             throw new ResourceNotFoundException(e);
         }
         List<ServiceClient> serviceClients = serviceClientConverter.convertServiceClientDtos(serviceClientDtos);
+        Collections.sort(serviceClients, serviceClientSortingComparator);
         return new ResponseEntity<>(serviceClients, HttpStatus.OK);
     }
-
 
     @InitBinder("clientAdd")
     @PreAuthorize("permitAll()")
@@ -443,6 +496,7 @@ public class ClientsApiController implements ClientsApi {
      */
     @Override
     @PreAuthorize("hasAuthority('ADD_CLIENT')")
+    @AuditEventMethod(event = ADD_CLIENT)
     public synchronized ResponseEntity<Client> addClient(ClientAdd clientAdd) {
         boolean ignoreWarnings = clientAdd.getIgnoreWarnings();
         IsAuthentication isAuthentication = null;
@@ -461,7 +515,7 @@ public class ClientsApiController implements ClientsApi {
         } catch (ClientService.ClientAlreadyExistsException
                 | ClientService.AdditionalMemberAlreadyExistsException e) {
             throw new ConflictException(e);
-        } catch (UnhandledWarningsException e) {
+        } catch (UnhandledWarningsException | ClientService.InvalidMemberClassException e) {
             throw new BadRequestException(e);
         }
         Client result = clientConverter.convert(added);
@@ -471,6 +525,7 @@ public class ClientsApiController implements ClientsApi {
 
     @Override
     @PreAuthorize("hasAuthority('DELETE_CLIENT')")
+    @AuditEventMethod(event = DELETE_CLIENT)
     public ResponseEntity<Void> deleteClient(String encodedClientId) {
         ClientId clientId = clientConverter.convertId(encodedClientId);
         try {
@@ -485,6 +540,7 @@ public class ClientsApiController implements ClientsApi {
 
     @Override
     @PreAuthorize("hasAuthority('DELETE_CLIENT')")
+    @AuditEventMethod(event = DELETE_ORPHANS)
     public ResponseEntity<Void> deleteOrphans(String encodedClientId) {
         ClientId clientId = clientConverter.convertId(encodedClientId);
         try {
@@ -514,11 +570,13 @@ public class ClientsApiController implements ClientsApi {
 
     @Override
     @PreAuthorize("hasAuthority('SEND_CLIENT_REG_REQ')")
+    @AuditEventMethod(event = REGISTER_CLIENT)
     public ResponseEntity<Void> registerClient(String encodedClientId) {
         ClientId clientId = clientConverter.convertId(encodedClientId);
         try {
             clientService.registerClient(clientId);
-        } catch (GlobalConfOutdatedException | ClientService.CannotRegisterOwnerException e) {
+        } catch (GlobalConfOutdatedException | ClientService.CannotRegisterOwnerException
+                | ClientService.InvalidMemberClassException | ClientService.InvalidInstanceIdentifierException e) {
             throw new BadRequestException(e);
         } catch (ClientNotFoundException e) {
             throw new ResourceNotFoundException(e);
@@ -530,6 +588,7 @@ public class ClientsApiController implements ClientsApi {
 
     @Override
     @PreAuthorize("hasAuthority('SEND_CLIENT_DEL_REQ')")
+    @AuditEventMethod(event = UNREGISTER_CLIENT)
     public ResponseEntity<Void> unregisterClient(String encodedClientId) {
         ClientId clientId = clientConverter.convertId(encodedClientId);
         try {
@@ -538,7 +597,7 @@ public class ClientsApiController implements ClientsApi {
             throw new BadRequestException(e);
         } catch (ClientNotFoundException e) {
             throw new ResourceNotFoundException(e);
-        } catch (ActionNotPossibleException | ClientService.CannotUnregisterOwnerException  e) {
+        } catch (ActionNotPossibleException | ClientService.CannotUnregisterOwnerException e) {
             throw new ConflictException(e);
         }
         return new ResponseEntity<>(HttpStatus.NO_CONTENT);
@@ -546,9 +605,12 @@ public class ClientsApiController implements ClientsApi {
 
     @Override
     @PreAuthorize("hasAuthority('SEND_OWNER_CHANGE_REQ')")
-    public ResponseEntity<Void> changeOwner(Client client) {
+    @AuditEventMethod(event = SEND_OWNER_CHANGE_REQ)
+    public ResponseEntity<Void> changeOwner(String encodedClientId) {
+        ClientId clientId = clientConverter.convertId(encodedClientId);
         try {
-            clientService.changeOwner(client.getMemberClass(), client.getMemberCode(), client.getSubsystemCode());
+            clientService.changeOwner(clientId.getMemberClass(), clientId.getMemberCode(),
+                    clientId.getSubsystemCode());
         } catch (GlobalConfOutdatedException | ClientService.MemberAlreadyOwnerException e) {
             throw new BadRequestException(e);
         } catch (ClientNotFoundException e) {
@@ -567,6 +629,7 @@ public class ClientsApiController implements ClientsApi {
         try {
             serviceClients = serviceClientConverter.
                     convertServiceClientDtos(serviceClientService.getServiceClientsByClient(clientId));
+            Collections.sort(serviceClients, serviceClientSortingComparator);
         } catch (ClientNotFoundException e) {
             throw new ResourceNotFoundException(e);
         }
@@ -577,15 +640,15 @@ public class ClientsApiController implements ClientsApi {
     @PreAuthorize("hasAuthority('VIEW_CLIENT_ACL_SUBJECTS')")
     public ResponseEntity<ServiceClient> getServiceClient(String id, String scId) {
         ClientId clientIdentifier = clientConverter.convertId(id);
-        ServiceClientIdentifierDto serviceClientIdentifierDto = serviceClientIdentifierConverter.convertId(scId);
         ServiceClient serviceClient = null;
         try {
-            XRoadId serviceClientId =
-                    serviceClientService.convertServiceClientIdentifierDtoToXroadId(serviceClientIdentifierDto);
+            XRoadId serviceClientId = serviceClientHelper.processServiceClientXRoadId(scId);
             serviceClient = serviceClientConverter.convertServiceClientDto(
                     serviceClientService.getServiceClient(clientIdentifier, serviceClientId));
-        } catch (ClientNotFoundException | ServiceClientNotFoundException | LocalGroupNotFoundException e) {
+        } catch (ClientNotFoundException | ServiceClientNotFoundException e) {
             throw new ResourceNotFoundException(e);
+        } catch (ServiceClientIdentifierConverter.BadServiceClientIdentifierException e) {
+            throw serviceClientHelper.wrapInBadRequestException(e);
         }
 
         return new ResponseEntity<>(serviceClient, HttpStatus.OK);
@@ -595,44 +658,67 @@ public class ClientsApiController implements ClientsApi {
     @PreAuthorize("hasAuthority('VIEW_ACL_SUBJECT_OPEN_SERVICES')")
     public ResponseEntity<List<AccessRight>> getServiceClientAccessRights(String id, String scId) {
         ClientId clientIdentifier = clientConverter.convertId(id);
-        ServiceClientIdentifierDto serviceClientIdentifierDto = serviceClientIdentifierConverter.convertId(scId);
         List<AccessRight> accessRights = null;
         try {
-            XRoadId serviceClientId =
-                    serviceClientService.convertServiceClientIdentifierDtoToXroadId(serviceClientIdentifierDto);
+            XRoadId serviceClientId = serviceClientHelper.processServiceClientXRoadId(scId);
             accessRights = accessRightConverter.convert(
                     serviceClientService.getServiceClientAccessRights(clientIdentifier, serviceClientId));
-        } catch (IdentifierNotFoundException | ClientNotFoundException
-                | ServiceClientNotFoundException | LocalGroupNotFoundException e) {
+        } catch (ServiceClientNotFoundException | ClientNotFoundException e) {
             throw new ResourceNotFoundException(e);
+        } catch (ServiceClientIdentifierConverter.BadServiceClientIdentifierException e) {
+            throw serviceClientHelper.wrapInBadRequestException(e);
         }
         return new ResponseEntity<>(accessRights, HttpStatus.OK);
     }
 
-    // TO DO: correct permissions.
-    // TO DO: tests
     @Override
-    @PreAuthorize("hasAuthority('VIEW_CLIENT_ACL_SUBJECTS')")
+    @PreAuthorize("hasAuthority('EDIT_ACL_SUBJECT_OPEN_SERVICES')")
+    @AuditEventMethod(event = ADD_SERVICE_CLIENT_ACCESS_RIGHTS)
     public ResponseEntity<List<AccessRight>> addServiceClientAccessRights(String encodedClientId,
             String endcodedServiceClientId, AccessRights accessRights) {
         ClientId clientId = clientConverter.convertId(encodedClientId);
-        ServiceClientIdentifierDto dto = serviceClientIdentifierConverter.convertId(endcodedServiceClientId);
-        XRoadId serviceClientId = dto.getXRoadId();
-        if (dto.isLocalGroup()) {
-            try {
-                serviceClientId = localGroupService.getLocalGroupIdAsXroadId(dto.getLocalGroupId());
-            } catch (LocalGroupNotFoundException e) {
-                throw new ResourceNotFoundException(e);
-            }
-        }
         Set<String> serviceCodes = getServiceCodes(accessRights);
-        serviceClientService.addServiceClientAccessRights(clientId, serviceClientId, serviceCodes);
-        return null;
+        List<ServiceClientAccessRightDto> accessRightTypes = null;
+        try {
+            XRoadId serviceClientId = serviceClientHelper.processServiceClientXRoadId(endcodedServiceClientId);
+            accessRightTypes = accessRightService.addServiceClientAccessRights(clientId, serviceCodes, serviceClientId);
+        } catch (ServiceClientNotFoundException | ClientNotFoundException e) {
+            throw new ResourceNotFoundException(e);
+        } catch (ServiceNotFoundException e) {
+            throw new BadRequestException(e);
+        } catch (AccessRightService.DuplicateAccessRightException e) {
+            throw new ConflictException(e);
+        } catch (ServiceClientIdentifierConverter.BadServiceClientIdentifierException e) {
+            throw serviceClientHelper.wrapInBadRequestException(e);
+        }
+        return new ResponseEntity<>(accessRightConverter.convert(accessRightTypes), HttpStatus.CREATED);
+    }
+
+    @Override
+    @PreAuthorize("hasAuthority('EDIT_ACL_SUBJECT_OPEN_SERVICES')")
+    @AuditEventMethod(event = REMOVE_SERVICE_CLIENT_ACCESS_RIGHTS)
+    public ResponseEntity<Void> deleteServiceClientAccessRights(String encodedClientId,
+            String endcodedServiceClientId, AccessRights accessRights) {
+        ClientId clientId = clientConverter.convertId(encodedClientId);
+        Set<String> serviceCodes = getServiceCodes(accessRights);
+        try {
+            XRoadId serviceClientId = serviceClientHelper.processServiceClientXRoadId(endcodedServiceClientId);
+            accessRightService.deleteServiceClientAccessRights(clientId, serviceCodes, serviceClientId);
+        } catch (ServiceClientNotFoundException | ClientNotFoundException e) {
+            throw new ResourceNotFoundException(e);
+        } catch (ServiceNotFoundException e) {
+            throw new BadRequestException(e);
+        } catch (AccessRightService.AccessRightNotFoundException e) {
+            throw new ConflictException(e);
+        } catch (ServiceClientIdentifierConverter.BadServiceClientIdentifierException e) {
+            throw serviceClientHelper.wrapInBadRequestException(e);
+        }
+        return new ResponseEntity<>(HttpStatus.NO_CONTENT);
     }
 
     private Set<String> getServiceCodes(AccessRights accessRights) {
         Set<String> serviceCodes = new HashSet<>();
-        for (AccessRight accessRight: accessRights.getItems()) {
+        for (AccessRight accessRight : accessRights.getItems()) {
             serviceCodes.add(accessRight.getServiceCode());
         }
         return serviceCodes;

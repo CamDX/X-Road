@@ -1,5 +1,6 @@
 /**
  * The MIT License
+ * Copyright (c) 2019- Nordic Institute for Interoperability Solutions (NIIS)
  * Copyright (c) 2018 Estonian Information System Authority (RIA),
  * Nordic Institute for Interoperability Solutions (NIIS), Population Register Centre (VRK)
  * Copyright (c) 2015-2017 Estonian Information System Authority (RIA), Population Register Centre (VRK)
@@ -28,15 +29,23 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import org.niis.xroad.restapi.config.SessionTimeoutFilter;
+import org.niis.xroad.restapi.converter.AlertDataConverter;
+import org.niis.xroad.restapi.domain.AlertData;
+import org.niis.xroad.restapi.dto.AlertStatus;
+import org.niis.xroad.restapi.service.NotificationService;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestMethod;
 import org.springframework.web.bind.annotation.RestController;
 
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpSession;
+
+import static org.niis.xroad.restapi.openapi.ApiUtil.API_V1_PREFIX;
 
 /**
  * Controller notifications that are polled.
@@ -45,25 +54,50 @@ import javax.servlet.http.HttpSession;
  * {@link SessionTimeoutFilter}
  */
 @RestController
-@RequestMapping(NotificationsApiController.NOTIFICATIONS_API_URL)
+@RequestMapping(NotificationsApiController.NOTIFICATIONS_API_V1_PATH)
 @Slf4j
-@PreAuthorize("denyAll")
+@PreAuthorize("isAuthenticated()")
 public class NotificationsApiController {
+    public static final String NOTIFICATIONS_API_V1_PATH = API_V1_PREFIX + "/notifications";
 
-    public static final String NOTIFICATIONS_API_URL = "/api/notifications";
+    private final NotificationService notificationService;
+    private final AlertDataConverter alertDataConverter;
+
+    @Autowired
+    public NotificationsApiController(
+            NotificationService notificationService, AlertDataConverter alertDataConverter) {
+        this.notificationService = notificationService;
+        this.alertDataConverter = alertDataConverter;
+    }
 
     /**
      * check if a HttpSession is currently alive
      */
-    @PreAuthorize("permitAll")
-    @RequestMapping(value = "/session-status",
-            produces = { "application/json" },
-            method = RequestMethod.GET)
+    @GetMapping(value = "/session-status", produces = { "application/json" })
     public ResponseEntity<StatusData> isSessionAlive(HttpServletRequest request) {
         HttpSession session = request.getSession(false);
         boolean isStillAlive = session != null;
         return new ResponseEntity<>(new StatusData(isStillAlive),
                 HttpStatus.OK);
+    }
+
+    /**
+     * check if there are alerts
+     */
+    @GetMapping(value = "/alerts", produces = { "application/json" })
+    public ResponseEntity<AlertData> checkAlerts() {
+        AlertStatus alertStatus = notificationService.getAlerts();
+        return new ResponseEntity<>(alertDataConverter.convert(alertStatus), HttpStatus.OK);
+    }
+
+    /**
+     * reset "backupRestoreRunningSince" alert
+     */
+    @PreAuthorize("hasAnyAuthority('BACKUP_CONFIGURATION', 'RESTORE_CONFIGURATION')")
+    @PutMapping(value = "/alerts/reset")
+    public ResponseEntity<Void> resetBackupRestoreRunningSince() {
+        notificationService.resetBackupRestoreRunningSince();
+        return new ResponseEntity<>(HttpStatus.NO_CONTENT);
     }
 
     @Data

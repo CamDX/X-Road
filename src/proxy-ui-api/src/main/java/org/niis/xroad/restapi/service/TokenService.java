@@ -1,5 +1,6 @@
 /**
  * The MIT License
+ * Copyright (c) 2019- Nordic Institute for Interoperability Solutions (NIIS)
  * Copyright (c) 2018 Estonian Information System Authority (RIA),
  * Nordic Institute for Interoperability Solutions (NIIS), Population Register Centre (VRK)
  * Copyright (c) 2015-2017 Estonian Information System Authority (RIA), Population Register Centre (VRK)
@@ -30,8 +31,11 @@ import ee.ria.xroad.signer.protocol.dto.CertificateInfo;
 import ee.ria.xroad.signer.protocol.dto.KeyInfo;
 import ee.ria.xroad.signer.protocol.dto.TokenInfo;
 import ee.ria.xroad.signer.protocol.dto.TokenInfoAndKeyId;
+import ee.ria.xroad.signer.protocol.dto.TokenStatusInfo;
 
 import lombok.extern.slf4j.Slf4j;
+import org.niis.xroad.restapi.config.audit.AuditDataHelper;
+import org.niis.xroad.restapi.dto.TokenInitStatusInfo;
 import org.niis.xroad.restapi.exceptions.ErrorDeviation;
 import org.niis.xroad.restapi.facade.SignerProxyFacade;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -40,6 +44,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.function.Predicate;
 
 import static ee.ria.xroad.common.ErrorCodes.SIGNER_X;
@@ -51,6 +56,10 @@ import static ee.ria.xroad.common.ErrorCodes.X_PIN_INCORRECT;
 import static ee.ria.xroad.common.ErrorCodes.X_TOKEN_NOT_ACTIVE;
 import static ee.ria.xroad.common.ErrorCodes.X_TOKEN_NOT_FOUND;
 import static java.util.stream.Collectors.toList;
+import static org.niis.xroad.restapi.config.audit.RestApiAuditProperty.TOKEN_FRIENDLY_NAME;
+import static org.niis.xroad.restapi.exceptions.DeviationCodes.ERROR_PIN_INCORRECT;
+import static org.niis.xroad.restapi.exceptions.DeviationCodes.ERROR_TOKEN_NOT_ACTIVE;
+import static org.niis.xroad.restapi.service.PossibleActionsRuleEngine.SOFTWARE_TOKEN_ID;
 
 /**
  * Service that handles tokens
@@ -63,35 +72,39 @@ public class TokenService {
 
     private final SignerProxyFacade signerProxyFacade;
     private final PossibleActionsRuleEngine possibleActionsRuleEngine;
+    private final AuditDataHelper auditDataHelper;
 
     /**
      * TokenService constructor
      */
     @Autowired
     public TokenService(SignerProxyFacade signerProxyFacade,
-            PossibleActionsRuleEngine possibleActionsRuleEngine) {
+            PossibleActionsRuleEngine possibleActionsRuleEngine,
+            AuditDataHelper auditDataHelper) {
         this.signerProxyFacade = signerProxyFacade;
         this.possibleActionsRuleEngine = possibleActionsRuleEngine;
+        this.auditDataHelper = auditDataHelper;
     }
 
     /**
      * get all tokens
+     *
      * @return
      */
     public List<TokenInfo> getAllTokens() {
         try {
             return signerProxyFacade.getTokens();
         } catch (Exception e) {
-            throw new RuntimeException("could not list all tokens", e);
+            throw new SignerNotReachableException("could not list all tokens", e);
         }
     }
 
     /**
      * get all sign certificates for a given client.
+     *
      * @param clientType client who's member certificates need to be
      * linked to
      * @return
-     * @throws Exception
      */
     public List<CertificateInfo> getSignCertificates(ClientType clientType) {
         return getCertificates(clientType, true);
@@ -99,10 +112,10 @@ public class TokenService {
 
     /**
      * get all certificates for a given client.
+     *
      * @param clientType client who's member certificates need to be
      * linked to
      * @return
-     * @throws Exception
      */
     public List<CertificateInfo> getAllCertificates(ClientType clientType) {
         return getCertificates(clientType, false);
@@ -110,6 +123,7 @@ public class TokenService {
 
     /**
      * Get all certificates for a given client
+     *
      * @param clientType
      * @param onlySignCertificates if true, return only signing certificates
      * @return
@@ -130,6 +144,7 @@ public class TokenService {
 
     /**
      * Activate a token
+     *
      * @param id id of token
      * @param password password for token
      * @throws TokenNotFoundException if token was not found
@@ -141,9 +156,11 @@ public class TokenService {
 
         // check that action is possible
         TokenInfo tokenInfo = getToken(id);
+
+        auditDataHelper.put(tokenInfo);
+
         possibleActionsRuleEngine.requirePossibleTokenAction(PossibleActionEnum.TOKEN_ACTIVATE,
                 tokenInfo);
-
         try {
             signerProxyFacade.activateToken(id, password);
         } catch (CodedException e) {
@@ -155,12 +172,13 @@ public class TokenService {
                 throw e;
             }
         } catch (Exception other) {
-            throw new RuntimeException("token activation failed", other);
+            throw new SignerNotReachableException("token activation failed", other);
         }
     }
 
     /**
      * Deactivate a token
+     *
      * @param id id of token
      * @throws TokenNotFoundException if token was not found
      * @throws ActionNotPossibleException if deactivation was not possible
@@ -169,6 +187,9 @@ public class TokenService {
 
         // check that action is possible
         TokenInfo tokenInfo = getToken(id);
+
+        auditDataHelper.put(tokenInfo);
+
         possibleActionsRuleEngine.requirePossibleTokenAction(PossibleActionEnum.TOKEN_DEACTIVATE,
                 tokenInfo);
 
@@ -181,12 +202,13 @@ public class TokenService {
                 throw e;
             }
         } catch (Exception other) {
-            throw new RuntimeException("token deactivation failed", other);
+            throw new SignerNotReachableException("token deactivation failed", other);
         }
     }
 
     /**
      * return one token
+     *
      * @param id
      * @throws TokenNotFoundException if token was not found
      */
@@ -200,12 +222,13 @@ public class TokenService {
                 throw e;
             }
         } catch (Exception other) {
-            throw new RuntimeException("get token failed", other);
+            throw new SignerNotReachableException("get token failed", other);
         }
     }
 
     /**
      * update token friendly name
+     *
      * @param tokenId
      * @param friendlyName
      * @throws TokenNotFoundException if token was not found
@@ -215,6 +238,8 @@ public class TokenService {
 
         // check that updating friendly name is possible
         TokenInfo tokenInfo = getToken(tokenId);
+        auditDataHelper.put(tokenInfo);
+        auditDataHelper.put(TOKEN_FRIENDLY_NAME, friendlyName); // Override old value with the new
         possibleActionsRuleEngine.requirePossibleTokenAction(PossibleActionEnum.EDIT_FRIENDLY_NAME,
                 tokenInfo);
 
@@ -228,7 +253,7 @@ public class TokenService {
                 throw e;
             }
         } catch (Exception other) {
-            throw new RuntimeException("update token friendly name failed", other);
+            throw new SignerNotReachableException("update token friendly name failed", other);
         }
         return tokenInfo;
     }
@@ -276,7 +301,6 @@ public class TokenService {
     static final String TOKEN_NOT_ACTIVE_FAULT_CODE = SIGNER_X + "." + X_TOKEN_NOT_ACTIVE;
     static final String CKR_PIN_INCORRECT_MESSAGE = "Login failed: CKR_PIN_INCORRECT";
 
-
     /**
      * Get TokenInfo for key id
      */
@@ -290,7 +314,7 @@ public class TokenService {
                 throw e;
             }
         } catch (Exception other) {
-            throw new RuntimeException("getTokenForKeyId failed", other);
+            throw new SignerNotReachableException("getTokenForKeyId failed", other);
         }
     }
 
@@ -310,7 +334,45 @@ public class TokenService {
                 throw e;
             }
         } catch (Exception other) {
-            throw new RuntimeException("getTokenAndKeyIdForCertHash failed", other);
+            throw new SignerNotReachableException("getTokenAndKeyIdForCertHash failed", other);
+        }
+    }
+
+    /**
+     * Whether or not a software token exists AND it's status != TokenStatusInfo.NOT_INITIALIZED
+     *
+     * @return true/false
+     */
+    public boolean isSoftwareTokenInitialized() {
+        boolean isSoftwareTokenInitialized = false;
+        List<TokenInfo> tokens = getAllTokens();
+        Optional<TokenInfo> firstSoftwareToken = tokens.stream()
+                .filter(tokenInfo -> tokenInfo.getId().equals(SOFTWARE_TOKEN_ID))
+                .findFirst();
+
+        if (firstSoftwareToken.isPresent()) {
+            TokenInfo token = firstSoftwareToken.get();
+            isSoftwareTokenInitialized = token.getStatus() != TokenStatusInfo.NOT_INITIALIZED;
+        }
+        return isSoftwareTokenInitialized;
+    }
+
+    /**
+     * Whether or not a software token exists AND it's status != TokenStatusInfo.NOT_INITIALIZED
+     *
+     * @return {@link TokenInitStatusInfo}
+     */
+    public TokenInitStatusInfo getSoftwareTokenInitStatus() {
+        try {
+            boolean isSoftwareTokenInitialized = isSoftwareTokenInitialized();
+            if (isSoftwareTokenInitialized) {
+                return TokenInitStatusInfo.INITIALIZED;
+            } else {
+                return TokenInitStatusInfo.NOT_INITIALIZED;
+            }
+        } catch (SignerNotReachableException e) {
+            log.error("Could not get software token status from signer", e);
+            return TokenInitStatusInfo.UNKNOWN;
         }
     }
 
@@ -330,14 +392,21 @@ public class TokenService {
                 throw e;
             }
         } catch (Exception other) {
-            throw new RuntimeException("getTokenAndKeyIdForCertHash failed", other);
+            throw new SignerNotReachableException("getTokenAndKeyIdForCertHash failed", other);
         }
     }
 
+    /**
+     * Check if there are any tokens that are not software tokens
+     *
+     * @return true if there are any other than software tokens present
+     */
+    public boolean hasHardwareTokens() {
+        List<TokenInfo> allTokens = getAllTokens();
+        return allTokens.stream().anyMatch(tokenInfo -> !SOFTWARE_TOKEN_ID.equals(tokenInfo.getId()));
+    }
+
     public static class PinIncorrectException extends ServiceException {
-
-        public static final String ERROR_PIN_INCORRECT = "pin_incorrect";
-
         public PinIncorrectException(Throwable t) {
             super(t, createError());
         }
@@ -349,9 +418,6 @@ public class TokenService {
     }
 
     public static class TokenNotActiveException extends ServiceException {
-
-        public static final String ERROR_TOKEN_NOT_ACTIVE = "token_not_active";
-
         public TokenNotActiveException(Throwable t) {
             super(t, createError());
         }

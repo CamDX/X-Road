@@ -1,5 +1,35 @@
+<!--
+   The MIT License
+   Copyright (c) 2019- Nordic Institute for Interoperability Solutions (NIIS)
+   Copyright (c) 2018 Estonian Information System Authority (RIA),
+   Nordic Institute for Interoperability Solutions (NIIS), Population Register Centre (VRK)
+   Copyright (c) 2015-2017 Estonian Information System Authority (RIA), Population Register Centre (VRK)
+
+   Permission is hereby granted, free of charge, to any person obtaining a copy
+   of this software and associated documentation files (the "Software"), to deal
+   in the Software without restriction, including without limitation the rights
+   to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+   copies of the Software, and to permit persons to whom the Software is
+   furnished to do so, subject to the following conditions:
+
+   The above copyright notice and this permission notice shall be included in
+   all copies or substantial portions of the Software.
+
+   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+   IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+   FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+   AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+   LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+   OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+   THE SOFTWARE.
+ -->
 <template>
-  <v-dialog v-model="show" max-width="550" persistent data-test="system-parameters-add-timestamping-service-dialog">
+  <v-dialog
+    v-model="show"
+    max-width="550"
+    persistent
+    data-test="system-parameters-add-timestamping-service-dialog"
+  >
     <template v-slot:activator="{ on: { click } }">
       <large-button
         data-test="system-parameters-timestamping-services-add-button"
@@ -28,7 +58,10 @@
               }}
             </v-col>
           </v-row>
-          <v-radio-group v-model="selectedTimestampingServiceName" data-test="system-parameters-add-timestamping-service-dialog-radio-group">
+          <v-radio-group
+            v-model="selectedTimestampingServiceName"
+            data-test="system-parameters-add-timestamping-service-dialog-radio-group"
+          >
             <v-row
               class="option-row"
               v-for="timestampingService in selectableTimestampingServices"
@@ -71,7 +104,7 @@ import * as api from '@/util/api';
 import { Permissions } from '@/global';
 import LargeButton from '@/components/ui/LargeButton.vue';
 import { Prop } from 'vue/types/options';
-import { TimestampingService } from '@/types';
+import { TimestampingService } from '@/openapi-types';
 
 export default Vue.extend({
   name: 'AddTimestampingServiceDialog',
@@ -113,7 +146,7 @@ export default Vue.extend({
   methods: {
     fetchApprovedTimestampingServices(): void {
       api
-        .get('/timestamping-services')
+        .get<TimestampingService[]>('/timestamping-services')
         .then((resp) => (this.approvedTimestampingServices = resp.data))
         .catch((error) => this.$store.dispatch('showError', error));
     },
@@ -121,7 +154,7 @@ export default Vue.extend({
       this.loading = true;
       api
         .post('/system/timestamping-services', this.selectedTimestampingService)
-        .then((resp) => {
+        .then(() => {
           this.$emit('added');
           this.loading = false;
           this.close();

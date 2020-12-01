@@ -1,5 +1,6 @@
 /**
  * The MIT License
+ * Copyright (c) 2019- Nordic Institute for Interoperability Solutions (NIIS)
  * Copyright (c) 2018 Estonian Information System Authority (RIA),
  * Nordic Institute for Interoperability Solutions (NIIS), Population Register Centre (VRK)
  * Copyright (c) 2015-2017 Estonian Information System Authority (RIA), Population Register Centre (VRK)
@@ -33,7 +34,7 @@ import org.quartz.JobDataMap;
 import org.quartz.JobExecutionContext;
 import org.quartz.JobExecutionException;
 
-import java.time.LocalTime;
+import java.time.OffsetDateTime;
 
 /**
  * Quartz job implementation for the configuration client.
@@ -47,15 +48,18 @@ public class ConfigurationClientJob implements Job {
 
         if (client != null && client instanceof ConfigurationClient) {
             try {
-                ((ConfigurationClient) client).execute();
+                ((ConfigurationClient)client).execute();
 
-                DiagnosticsStatus status = new DiagnosticsStatus(DiagnosticsErrorCodes.RETURN_SUCCESS, LocalTime.now(),
-                        LocalTime.now().plusSeconds(SystemProperties.getConfigurationClientUpdateIntervalSeconds()));
+                DiagnosticsStatus status =
+                        new DiagnosticsStatus(DiagnosticsErrorCodes.RETURN_SUCCESS, OffsetDateTime.now(),
+                                OffsetDateTime.now()
+                                        .plusSeconds(SystemProperties.getConfigurationClientUpdateIntervalSeconds()));
                 context.setResult(status);
             } catch (Exception e) {
                 DiagnosticsStatus status = new DiagnosticsStatus(ConfigurationClientUtils.getErrorCode(e),
-                        LocalTime.now(),
-                        LocalTime.now().plusSeconds(SystemProperties.getConfigurationClientUpdateIntervalSeconds()));
+                        OffsetDateTime.now(),
+                        OffsetDateTime.now()
+                                .plusSeconds(SystemProperties.getConfigurationClientUpdateIntervalSeconds()));
                 context.setResult(status);
 
                 throw new JobExecutionException(e);

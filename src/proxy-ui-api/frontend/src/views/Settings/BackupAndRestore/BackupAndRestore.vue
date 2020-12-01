@@ -1,3 +1,28 @@
+<!--
+   The MIT License
+   Copyright (c) 2019- Nordic Institute for Interoperability Solutions (NIIS)
+   Copyright (c) 2018 Estonian Information System Authority (RIA),
+   Nordic Institute for Interoperability Solutions (NIIS), Population Register Centre (VRK)
+   Copyright (c) 2015-2017 Estonian Information System Authority (RIA), Population Register Centre (VRK)
+
+   Permission is hereby granted, free of charge, to any person obtaining a copy
+   of this software and associated documentation files (the "Software"), to deal
+   in the Software without restriction, including without limitation the rights
+   to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+   copies of the Software, and to permit persons to whom the Software is
+   furnished to do so, subject to the following conditions:
+
+   The above copyright notice and this permission notice shall be included in
+   all copies or substantial portions of the Software.
+
+   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+   IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+   FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+   AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+   LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+   OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+   THE SOFTWARE.
+ -->
 <template>
   <div class="wrapper xrd-view-common">
     <div class="table-toolbar">
@@ -8,6 +33,7 @@
         hide-details
         class="search-input"
         data-test="backup-search"
+        autofocus
       >
         <v-icon slot="append">mdi-magnify</v-icon>
       </v-text-field>
@@ -20,29 +46,32 @@
           @click="createBackup"
           >{{ $t('backup.backupConfiguration.button') }}
         </large-button>
-        <input
-          v-show="false"
-          ref="backupUpload"
-          type="file"
-          accept=".tar"
-          @change="onUploadFileChanged"
-        />
-        <large-button
-          v-if="canBackup"
-          color="primary"
+        <file-upload
+          accepts=".tar"
+          @file-changed="onFileUploaded"
+          v-slot="{ upload }"
+        >
+          <large-button
+            v-if="canBackup"
+            color="primary"
+            :loading="uploadingBackup"
+            class="button-spacing"
+            @click="upload"
+            data-test="backup-upload"
+            >{{ $t('backup.uploadBackup.button') }}
+          </large-button>
+        </file-upload>
+        <confirm-dialog
+          v-if="uploadedFile !== null"
+          :dialog="needsConfirmation"
+          title="backup.uploadBackup.confirmationDialog.title"
+          data-test="backup-upload-confirm-overwrite-dialog"
+          text="backup.uploadBackup.confirmationDialog.confirmation"
+          :data="{ name: uploadedFile.name }"
           :loading="uploadingBackup"
-          class="button-spacing"
-          @click="$refs.backupUpload.click()"
-          data-test="backup-upload"
-          >{{ $t('backup.uploadBackup.button') }}
-        </large-button>
-        <confirm-dialog :dialog="needsConfirmation" title="backup.uploadBackup.confirmationDialog.title"
-                        data-test="backup-upload-confirm-overwrite-dialog"
-                        text="backup.uploadBackup.confirmationDialog.confirmation"
-                        :data="{...uploadedFile}"
-                        :loading="uploadingBackup"
-                        @cancel="needsConfirmation = false"
-                        @accept="overwriteBackup"/>
+          @cancel="needsConfirmation = false"
+          @accept="overwriteBackup"
+        />
       </div>
     </div>
     <BackupsDataTable
@@ -63,19 +92,23 @@ import BackupsDataTable from '@/views/Settings/BackupAndRestore/BackupsDataTable
 import { Permissions } from '@/global';
 import LargeButton from '@/components/ui/LargeButton.vue';
 import * as api from '@/util/api';
-import { Backup } from '@/types';
-import { AxiosResponse } from 'axios';
+import { Backup } from '@/openapi-types';
 import ConfirmDialog from '@/components/ui/ConfirmDialog.vue';
+import FileUpload from '@/components/ui/FileUpload.vue';
+import { FileUploadResult } from '@/ui-types';
 
-const uploadBackup = (backupFile: File, ignoreWarnings: boolean = false) => {
+const uploadBackup = (backupFile: File, ignoreWarnings = false) => {
   const formData = new FormData();
   formData.set('file', backupFile, backupFile.name);
-  return api
-    .post(`/backups/upload?ignore_warnings=${ignoreWarnings}`, formData, {
+  return api.post(
+    `/backups/upload?ignore_warnings=${ignoreWarnings}`,
+    formData,
+    {
       headers: {
         'Content-Type': 'multipart/form-data',
       },
-    });
+    },
+  );
 };
 
 export default Vue.extend({
@@ -83,6 +116,7 @@ export default Vue.extend({
     BackupsDataTable,
     LargeButton,
     ConfirmDialog,
+    FileUpload,
   },
   data() {
     return {
@@ -104,10 +138,10 @@ export default Vue.extend({
   methods: {
     async fetchData() {
       return api
-        .get('/backups')
+        .get<Backup[]>('/backups')
         .then((res) => {
-          this.backups = res.data.sort((a: Backup, b: Backup) => {
-            return b.created_at > a.created_at;
+          this.backups = res.data.sort((a, b) => {
+            return b.created_at.localeCompare(a.created_at);
           });
         })
         .catch((error) => this.$store.dispatch('showError', error));
@@ -115,8 +149,8 @@ export default Vue.extend({
     async createBackup() {
       this.creatingBackup = true;
       return api
-        .post('/backups', null)
-        .then((resp: AxiosResponse<Backup>) => {
+        .post<Backup>('/backups', null)
+        .then((resp) => {
           this.$store.dispatch(
             'showSuccessRaw',
             this.$t('backup.backupConfiguration.message.success', {
@@ -128,37 +162,49 @@ export default Vue.extend({
         .catch((error) => this.$store.dispatch('showError', error))
         .finally(() => (this.creatingBackup = false));
     },
-    onUploadFileChanged(event: any): void {
-      const fileList = (event.target.files ||
-        event.dataTransfer.files) as FileList;
-      if (!fileList.length) {
-        return;
-      }
-
+    onFileUploaded(result: FileUploadResult): void {
       this.uploadingBackup = true;
-      this.uploadedFile = fileList[0];
-      uploadBackup(fileList[0])
+      this.uploadedFile = result.file;
+      uploadBackup(result.file)
         .then(() => {
           this.fetchData();
-          this.$store.dispatch('showSuccessRaw', this.$t('backup.uploadBackup.success', {file: this.uploadedFile?.name}));
+          this.$store.dispatch(
+            'showSuccessRaw',
+            this.$t('backup.uploadBackup.success', {
+              file: this.uploadedFile?.name,
+            }),
+          );
         })
         .catch((error) => {
-          const warnings = error.response?.data?.warnings as Array<{ code: string }>;
-          if (error.response?.status === 400
-            && warnings?.some((warning) => warning.code === 'warning_file_already_exists')) {
+          const warnings = error.response?.data?.warnings as Array<{
+            code: string;
+          }>;
+          if (
+            error.response?.status === 400 &&
+            warnings?.some(
+              (warning) => warning.code === 'warning_file_already_exists',
+            )
+          ) {
             this.needsConfirmation = true;
             return;
           }
           this.$store.dispatch('showError', error);
         })
-        .finally(() => this.uploadingBackup = false);
+        .finally(() => (this.uploadingBackup = false));
     },
     async overwriteBackup() {
       this.uploadingBackup = true;
+      // this will only be called if the file has already been uploaded once and got warnings
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
       return uploadBackup(this.uploadedFile!, true)
         .then(() => {
           this.fetchData();
-          this.$store.dispatch('showSuccessRaw', this.$t('backup.uploadBackup.success', {file: this.uploadedFile?.name}));
+          this.$store.dispatch(
+            'showSuccessRaw',
+            this.$t('backup.uploadBackup.success', {
+              file: this.uploadedFile?.name,
+            }),
+          );
         })
         .catch((error) => this.$store.dispatch('showError', error))
         .finally(() => {

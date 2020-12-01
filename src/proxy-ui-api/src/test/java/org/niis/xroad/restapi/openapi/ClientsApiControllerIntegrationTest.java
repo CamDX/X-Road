@@ -1,5 +1,6 @@
 /**
  * The MIT License
+ * Copyright (c) 2019- Nordic Institute for Interoperability Solutions (NIIS)
  * Copyright (c) 2018 Estonian Information System Authority (RIA),
  * Nordic Institute for Interoperability Solutions (NIIS), Population Register Centre (VRK)
  * Copyright (c) 2015-2017 Estonian Information System Authority (RIA), Population Register Centre (VRK)
@@ -26,20 +27,18 @@ package org.niis.xroad.restapi.openapi;
 
 import ee.ria.xroad.common.conf.globalconf.GlobalGroupInfo;
 import ee.ria.xroad.common.identifier.ClientId;
+import ee.ria.xroad.common.identifier.SecurityServerId;
 import ee.ria.xroad.signer.protocol.dto.CertRequestInfo;
 import ee.ria.xroad.signer.protocol.dto.CertificateInfo;
 import ee.ria.xroad.signer.protocol.dto.KeyInfo;
 import ee.ria.xroad.signer.protocol.dto.KeyUsageInfo;
 import ee.ria.xroad.signer.protocol.dto.TokenInfo;
 
-import lombok.extern.slf4j.Slf4j;
 import org.junit.Before;
 import org.junit.Test;
-import org.junit.runner.RunWith;
 import org.mockito.stubbing.Answer;
-import org.niis.xroad.restapi.facade.GlobalConfFacade;
-import org.niis.xroad.restapi.facade.SignerProxyFacade;
 import org.niis.xroad.restapi.openapi.model.AccessRight;
+import org.niis.xroad.restapi.openapi.model.AccessRights;
 import org.niis.xroad.restapi.openapi.model.CertificateDetails;
 import org.niis.xroad.restapi.openapi.model.Client;
 import org.niis.xroad.restapi.openapi.model.ClientAdd;
@@ -56,34 +55,26 @@ import org.niis.xroad.restapi.openapi.model.ServiceDescription;
 import org.niis.xroad.restapi.openapi.model.ServiceDescriptionAdd;
 import org.niis.xroad.restapi.openapi.model.ServiceType;
 import org.niis.xroad.restapi.openapi.model.TokenCertificate;
-import org.niis.xroad.restapi.service.ManagementRequestSenderService;
-import org.niis.xroad.restapi.service.TokenService;
-import org.niis.xroad.restapi.service.UrlValidator;
 import org.niis.xroad.restapi.util.CertificateTestUtils;
 import org.niis.xroad.restapi.util.CertificateTestUtils.CertRequestInfoBuilder;
 import org.niis.xroad.restapi.util.TestUtils;
 import org.niis.xroad.restapi.util.TokenTestUtils;
 import org.niis.xroad.restapi.util.TokenTestUtils.TokenInfoBuilder;
-import org.niis.xroad.restapi.wsdl.WsdlValidator;
 import org.niis.xroad.restapi.wsdl.WsdlValidatorTest;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.jdbc.AutoConfigureTestDatabase;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.mock.mockito.MockBean;
-import org.springframework.boot.test.mock.mockito.SpyBean;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.test.context.support.WithMockUser;
-import org.springframework.test.context.junit4.SpringRunner;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 import static junit.framework.TestCase.fail;
@@ -98,28 +89,27 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
-import static org.niis.xroad.restapi.service.ServiceDescriptionService.ServiceAlreadyExistsException.ERROR_SERVICE_EXISTS;
-import static org.niis.xroad.restapi.service.ServiceDescriptionService.WARNING_WSDL_VALIDATION_WARNINGS;
-import static org.niis.xroad.restapi.service.ServiceDescriptionService.WsdlUrlAlreadyExistsException.ERROR_WSDL_EXISTS;
-import static org.niis.xroad.restapi.service.UnhandledWarningsException.ERROR_WARNINGS_DETECTED;
+import static org.niis.xroad.restapi.exceptions.DeviationCodes.ERROR_INVALID_INSTANCE_IDENTIFIER;
+import static org.niis.xroad.restapi.exceptions.DeviationCodes.ERROR_INVALID_MEMBER_CLASS;
+import static org.niis.xroad.restapi.exceptions.DeviationCodes.ERROR_INVALID_SERVICE_URL;
+import static org.niis.xroad.restapi.exceptions.DeviationCodes.ERROR_INVALID_WSDL;
+import static org.niis.xroad.restapi.exceptions.DeviationCodes.ERROR_SERVICE_EXISTS;
+import static org.niis.xroad.restapi.exceptions.DeviationCodes.ERROR_WARNINGS_DETECTED;
+import static org.niis.xroad.restapi.exceptions.DeviationCodes.ERROR_WSDL_EXISTS;
+import static org.niis.xroad.restapi.exceptions.DeviationCodes.WARNING_WSDL_VALIDATION_WARNINGS;
 import static org.niis.xroad.restapi.util.CertificateTestUtils.getResource;
 import static org.niis.xroad.restapi.util.DeviationTestUtils.assertErrorWithMetadata;
 import static org.niis.xroad.restapi.util.DeviationTestUtils.assertErrorWithoutMetadata;
 import static org.niis.xroad.restapi.util.DeviationTestUtils.assertWarning;
 import static org.niis.xroad.restapi.util.TestUtils.CLIENT_ID_SS1_INITIAL_SERVICEDESCRIPTION_COUNT;
 import static org.niis.xroad.restapi.util.TestUtils.assertLocationHeader;
-import static org.niis.xroad.restapi.wsdl.InvalidWsdlException.ERROR_INVALID_WSDL;
 
 /**
  * Test ClientsApiController
  */
-@RunWith(SpringRunner.class)
-@SpringBootTest
-@AutoConfigureTestDatabase
-@Transactional
-@Slf4j
-public class ClientsApiControllerIntegrationTest {
-
+public class ClientsApiControllerIntegrationTest extends AbstractApiControllerTestContext {
+    private static final SecurityServerId OWNER_SERVER_ID = SecurityServerId.create(TestUtils.getM1Ss1ClientId(),
+            "owner");
     private List<GlobalGroupInfo> globalGroupInfos = new ArrayList<>(Arrays.asList(
             TestUtils.getGlobalGroupInfo(TestUtils.INSTANCE_FI, TestUtils.GLOBALGROUP),
             TestUtils.getGlobalGroupInfo(TestUtils.INSTANCE_FI, TestUtils.GLOBALGROUP1),
@@ -127,25 +117,8 @@ public class ClientsApiControllerIntegrationTest {
     private List<String> instanceIdentifiers = new ArrayList<>(Arrays.asList(
             TestUtils.INSTANCE_FI,
             TestUtils.INSTANCE_EE));
-
-    @MockBean
-    private GlobalConfFacade globalConfFacade;
-
-    @MockBean
-    private SignerProxyFacade signerProxyFacade;
-
-    @MockBean
-    private TokenService tokenService;
-
-    @SpyBean
-    // partial mocking, just override getValidatorCommand()
-    private WsdlValidator wsdlValidator;
-
-    @MockBean
-    private UrlValidator urlValidator;
-
-    @MockBean
-    private ManagementRequestSenderService managementRequestSenderService;
+    private static final List<String> MEMBER_CLASSES = Arrays.asList(TestUtils.MEMBER_CLASS_GOV,
+            TestUtils.MEMBER_CLASS_PRO);
 
     @Before
     public void setup() throws Exception {
@@ -182,6 +155,9 @@ public class ClientsApiControllerIntegrationTest {
         when(urlValidator.isValidUrl(any())).thenReturn(true);
         when(managementRequestSenderService.sendClientRegisterRequest(any())).thenReturn(0);
         when(managementRequestSenderService.sendOwnerChangeRequest(any())).thenReturn(0);
+        when(serverConfService.getSecurityServerId()).thenReturn(OWNER_SERVER_ID);
+        when(currentSecurityServerId.getServerId()).thenReturn(OWNER_SERVER_ID);
+        when(globalConfService.getMemberClassesForThisInstance()).thenReturn(new HashSet<>(MEMBER_CLASSES));
     }
 
     @Autowired
@@ -193,7 +169,7 @@ public class ClientsApiControllerIntegrationTest {
         ResponseEntity<List<Client>> response =
                 clientsApiController.findClients(null, null, null, null, null, true, false, false, false);
         assertEquals(HttpStatus.OK, response.getStatusCode());
-        assertEquals(9, response.getBody().size());
+        assertEquals(11, response.getBody().size());
     }
 
     @Test
@@ -201,7 +177,7 @@ public class ClientsApiControllerIntegrationTest {
     public void ownerMemberFlag() {
         ResponseEntity<List<Client>> response =
                 clientsApiController.findClients(null, null, null, null, null, true, false, false, false);
-        assertEquals(9, response.getBody().size());
+        assertEquals(11, response.getBody().size());
         List<Client> owners = response.getBody().stream()
                 .filter(Client::getOwner)
                 .collect(Collectors.toList());
@@ -215,9 +191,9 @@ public class ClientsApiControllerIntegrationTest {
         ResponseEntity<List<Client>> response = clientsApiController.findClients(null, null, null, null, null, true,
                 true, false, false);
         assertEquals(HttpStatus.OK, response.getStatusCode());
-        assertEquals(5, response.getBody().size());
+        assertEquals(7, response.getBody().size());
         Client client = response.getBody().get(0);
-        assertEquals(TestUtils.NAME_FOR + "test-member", client.getMemberName());
+        assertEquals(TestUtils.NAME_FOR + "SS1", client.getMemberName());
         assertEquals("M1", client.getMemberCode());
     }
 
@@ -278,7 +254,7 @@ public class ClientsApiControllerIntegrationTest {
                 ClientId.create("FI", "GOV", "M1"),
                 true, true, CertificateInfo.STATUS_REGISTERED,
                 "id", CertificateTestUtils.getMockCertificateBytes(), null);
-        when(tokenService.getSignCertificates(any())).thenReturn(Collections.singletonList(mockCertificate));
+        doReturn(Collections.singletonList(mockCertificate)).when(tokenService).getSignCertificates(any());
 
         certificates = clientsApiController.getClientSignCertificates("FI:GOV:M1");
         assertEquals(HttpStatus.OK, certificates.getStatusCode());
@@ -447,7 +423,7 @@ public class ClientsApiControllerIntegrationTest {
         ResponseEntity<List<LocalGroup>> response =
                 clientsApiController.getClientLocalGroups(TestUtils.CLIENT_ID_SS1);
         assertEquals(HttpStatus.OK, response.getStatusCode());
-        assertEquals(2, response.getBody().size());
+        assertEquals(3, response.getBody().size());
     }
 
     private static LocalGroupAdd createLocalGroupAdd(String groupCode) {
@@ -482,7 +458,7 @@ public class ClientsApiControllerIntegrationTest {
         ResponseEntity<List<Client>> clientsResponse = clientsApiController.findClients(null, null, null, null, null,
                 true, false, false, false);
         assertEquals(HttpStatus.OK, clientsResponse.getStatusCode());
-        assertEquals(9, clientsResponse.getBody().size());
+        assertEquals(11, clientsResponse.getBody().size());
     }
 
     @Test
@@ -501,7 +477,7 @@ public class ClientsApiControllerIntegrationTest {
                 TestUtils.MEMBER_CLASS_PRO,
                 null, null, true, false, false, false);
         assertEquals(HttpStatus.OK, clientsResponse.getStatusCode());
-        assertEquals(2, clientsResponse.getBody().size());
+        assertEquals(3, clientsResponse.getBody().size());
     }
 
     @Test
@@ -580,7 +556,8 @@ public class ClientsApiControllerIntegrationTest {
 
         Service service = serviceDescription.getServices().iterator().next();
         assertEquals(TestUtils.CLIENT_ID_SS1 + ":openapi-servicecode.v1", service.getId());
-        assertEquals("openapi-servicecode.v1", service.getServiceCode());
+        assertEquals("openapi-servicecode.v1", service.getFullServiceCode());
+        assertEquals("openapi-servicecode", service.getServiceCode());
         assertEquals(Integer.valueOf(60), service.getTimeout());
         assertEquals(true, service.getSslAuth());
         assertEquals("https://restservice.com/api/v1", service.getUrl());
@@ -588,7 +565,7 @@ public class ClientsApiControllerIntegrationTest {
         ServiceDescription wsdlServiceDescription = getDescription(descriptions.getBody(),
                 "https://soapservice.com/v1/Endpoint?wsdl")
                 .get();
-        assertEquals(3, wsdlServiceDescription.getServices().size());
+        assertEquals(4, wsdlServiceDescription.getServices().size());
 
         ServiceDescription serviceDescriptionTypeRest = getDescription(descriptions.getBody(),
                 "https://restservice.com/api/v1/nosuchservice").get();
@@ -683,7 +660,7 @@ public class ClientsApiControllerIntegrationTest {
     public void addClientBadRequestFromWarnings() {
         // warning about unregistered client
         doReturn(null).when(globalConfFacade).getMemberName(any());
-        Client clientToAdd = createTestClient("UNREGISTEREDA", "B", "C");
+        Client clientToAdd = createTestClient(TestUtils.MEMBER_CLASS_GOV, "B", "C");
         try {
             clientsApiController.addClient(
                     new ClientAdd().client(clientToAdd).ignoreWarnings(false));
@@ -695,6 +672,21 @@ public class ClientsApiControllerIntegrationTest {
         ResponseEntity<Client> response = clientsApiController.addClient(
                 new ClientAdd().client(clientToAdd).ignoreWarnings(true));
         assertEquals(HttpStatus.CREATED, response.getStatusCode());
+    }
+
+    @Test
+    @WithMockUser(authorities = { "ADD_CLIENT" })
+    public void addClientBadRequestFromInvalidMemberClass() {
+        // warning about unregistered client
+        doReturn(null).when(globalConfFacade).getMemberName(any());
+        Client clientToAdd = createTestClient("INVALID", "B", "C");
+        try {
+            clientsApiController.addClient(
+                    new ClientAdd().client(clientToAdd).ignoreWarnings(false));
+            fail("should have thrown BadRequestException");
+        } catch (BadRequestException expected) {
+            assertEquals(ERROR_INVALID_MEMBER_CLASS, expected.getErrorDeviation().getCode());
+        }
     }
 
     @Test
@@ -747,6 +739,22 @@ public class ClientsApiControllerIntegrationTest {
             fail("should have thrown BadRequestException");
         } catch (BadRequestException expected) {
             assertEquals(ERROR_INVALID_WSDL, expected.getErrorDeviation().getCode());
+        }
+    }
+
+    @Test
+    @WithMockUser(authorities = { "ADD_WSDL" })
+    public void addWsdlServiceDescriptionBadServiceUrl() {
+        ServiceDescriptionAdd serviceDescription =
+                new ServiceDescriptionAdd().url("file:src/test/resources/wsdl/invalid-serviceurl.wsdl");
+        serviceDescription.setType(ServiceType.WSDL);
+        try {
+            serviceDescription.setIgnoreWarnings(true);
+            clientsApiController.addClientServiceDescription(TestUtils.CLIENT_ID_SS1, serviceDescription);
+            fail("should have thrown BadRequestException");
+        } catch (BadRequestException expected) {
+            assertEquals(ERROR_INVALID_SERVICE_URL, expected.getErrorDeviation().getCode());
+            assertFalse(expected.getErrorDeviation().getMetadata().isEmpty());
         }
     }
 
@@ -824,7 +832,7 @@ public class ClientsApiControllerIntegrationTest {
                 null,
                 null, null, null, null, null);
         List<ServiceClient> serviceClients = serviceClientResponse.getBody();
-        assertEquals(9, serviceClients.size());
+        assertEquals(10, serviceClients.size());
     }
 
     @Test
@@ -833,7 +841,6 @@ public class ClientsApiControllerIntegrationTest {
         ResponseEntity<List<ServiceClient>> serviceClientResponse = clientsApiController.findServiceClientCandidates(
                 TestUtils.CLIENT_ID_SS1,
                 TestUtils.NAME_FOR + TestUtils.SUBSYSTEM2, null, null, null, null, null);
-        // TO DO: lots of renames
         List<ServiceClient> serviceClients = serviceClientResponse.getBody();
         assertEquals(1, serviceClients.size());
     }
@@ -860,7 +867,7 @@ public class ClientsApiControllerIntegrationTest {
                 TestUtils.CLIENT_ID_SS1,
                 null, ServiceClientType.LOCALGROUP, null, null, null, null);
         List<ServiceClient> serviceClients = serviceClientResponse.getBody();
-        assertEquals(2, serviceClients.size());
+        assertEquals(3, serviceClients.size());
     }
 
     @Test
@@ -870,8 +877,16 @@ public class ClientsApiControllerIntegrationTest {
                 TestUtils.CLIENT_ID_SS1,
                 null, null, TestUtils.INSTANCE_EE, null, null, null);
         List<ServiceClient> serviceClients = serviceClientResponse.getBody();
-        assertEquals(5, serviceClients.size()); // includes localgroups
+        assertEquals(6, serviceClients.size()); // includes localgroups
+
+        ResponseEntity<List<ServiceClient>> partialInstanceMatchResponse =
+                clientsApiController.findServiceClientCandidates(
+                TestUtils.CLIENT_ID_SS1,
+                null, ServiceClientType.SUBSYSTEM, "E", null, null, null);
+        List<ServiceClient> partialInstanceMatch = partialInstanceMatchResponse.getBody();
+        assertEquals(0, partialInstanceMatch.size());
     }
+
 
     @Test
     @WithMockUser(authorities = { "VIEW_CLIENT_ACL_SUBJECTS" })
@@ -881,6 +896,13 @@ public class ClientsApiControllerIntegrationTest {
                 null, null, null, TestUtils.MEMBER_CLASS_GOV, null, null);
         List<ServiceClient> serviceClients = serviceClientResponse.getBody();
         assertEquals(3, serviceClients.size());
+
+        ResponseEntity<List<ServiceClient>> partialMemberClassMatchResponse =
+                clientsApiController.findServiceClientCandidates(
+                TestUtils.CLIENT_ID_SS1,
+                null, ServiceClientType.SUBSYSTEM, null, "GO", null, null);
+        List<ServiceClient> partialMemberClassMatch = partialMemberClassMatchResponse.getBody();
+        assertEquals(0, partialMemberClassMatch.size());
     }
 
     @Test
@@ -992,7 +1014,7 @@ public class ClientsApiControllerIntegrationTest {
         TokenInfo tokenInfo = new TokenInfoBuilder()
                 .key(keyInfo)
                 .build();
-        when(tokenService.getAllTokens()).thenReturn(Collections.singletonList(tokenInfo));
+        doReturn(Collections.singletonList(tokenInfo)).when(tokenService).getAllTokens();
         ResponseEntity<OrphanInformation> orphanResponse = clientsApiController
                 .getClientOrphans("FI:GOV:ORPHAN:SS1");
         assertEquals(HttpStatus.OK, orphanResponse.getStatusCode());
@@ -1020,8 +1042,8 @@ public class ClientsApiControllerIntegrationTest {
         TokenInfo tokenInfo = new TokenInfoBuilder()
                 .key(keyInfo)
                 .build();
-        when(tokenService.getAllTokens()).thenReturn(Collections.singletonList(tokenInfo));
-        when(tokenService.getTokenForKeyId(any())).thenReturn(tokenInfo);
+        doReturn(Collections.singletonList(tokenInfo)).when(tokenService).getAllTokens();
+        doReturn(tokenInfo).when(tokenService).getTokenForKeyId(any());
         ResponseEntity<Void> orphanResponse = clientsApiController
                 .deleteOrphans("FI:GOV:ORPHAN:SS1");
         assertEquals(HttpStatus.NO_CONTENT, orphanResponse.getStatusCode());
@@ -1058,6 +1080,26 @@ public class ClientsApiControllerIntegrationTest {
         clientsApiController.registerClient(TestUtils.CLIENT_ID_SS1);
     }
 
+    @WithMockUser(authorities = { "SEND_CLIENT_REG_REQ" })
+    public void registerClientWithInvalidInstanceIdentifier() throws Exception {
+        try {
+            clientsApiController.registerClient(TestUtils.CLIENT_ID_INVALID_INSTANCE_IDENTIFIER);
+            fail("should have thrown BadRequestException");
+        } catch (BadRequestException expected) {
+            assertEquals(ERROR_INVALID_INSTANCE_IDENTIFIER, expected.getErrorDeviation().getCode());
+        }
+    }
+
+    @WithMockUser(authorities = { "SEND_CLIENT_REG_REQ" })
+    public void registerClientWithInvalidMemberClass() throws Exception {
+        try {
+            clientsApiController.registerClient(TestUtils.CLIENT_ID_INVALID_MEMBER_CLASS);
+            fail("should have thrown BadRequestException");
+        } catch (BadRequestException expected) {
+            assertEquals(ERROR_INVALID_MEMBER_CLASS, expected.getErrorDeviation().getCode());
+        }
+    }
+
     @Test(expected = ConflictException.class)
     @WithMockUser(authorities = { "SEND_CLIENT_DEL_REQ" })
     public void unregisterOwner() {
@@ -1083,22 +1125,19 @@ public class ClientsApiControllerIntegrationTest {
         clientsApiController.addClient(new ClientAdd().client(createTestClient(
                 "GOV", "M2", null)).ignoreWarnings(true));
 
-        ResponseEntity<Void> response = clientsApiController.changeOwner(createTestClient(
-                "GOV", "M2", null));
+        ResponseEntity<Void> response = clientsApiController.changeOwner("FI:GOV:M2");
     }
 
     @Test(expected = BadRequestException.class)
     @WithMockUser(authorities = { "SEND_OWNER_CHANGE_REQ" })
     public void changeOwnerCurrentOwner() {
-        ResponseEntity<Void> response = clientsApiController.changeOwner(createTestClient(
-                "GOV", "M1", null));
+        ResponseEntity<Void> response = clientsApiController.changeOwner("FI:GOV:M1");
     }
 
     @Test(expected = ConflictException.class)
     @WithMockUser(authorities = { "SEND_OWNER_CHANGE_REQ" })
     public void changeOwnerSubsystem() {
-        ResponseEntity<Void> response = clientsApiController.changeOwner(createTestClient(
-                "GOV", "M1", "SS1"));
+        ResponseEntity<Void> response = clientsApiController.changeOwner("FI:GOV:M1:SS1");
     }
 
     @Test(expected = ResourceNotFoundException.class)
@@ -1108,8 +1147,7 @@ public class ClientsApiControllerIntegrationTest {
         client.setInstanceId("non");
         client.setMemberClass("existing");
         client.setMemberCode("client");
-        ResponseEntity<Void> response = clientsApiController.changeOwner(createTestClient(
-                "non", "existing", null));
+        ResponseEntity<Void> response = clientsApiController.changeOwner("FI:non:existing");
     }
 
     @Test(expected = BadRequestException.class)
@@ -1164,4 +1202,54 @@ public class ClientsApiControllerIntegrationTest {
         assertTrue(groupAcls.stream().anyMatch(acl -> "getRandom".equals(acl.getServiceCode())));
     }
 
+    @Test
+    @WithMockUser(authorities = { "EDIT_ACL_SUBJECT_OPEN_SERVICES" })
+    public void addServiceClientAccessRights() throws Exception {
+
+        String encodedOwnerId = "FI:GOV:M1:SS1";
+        String encodedSubsystemId = "EE:GOV:M2:SS3";
+        String encodedLocalGroupId = "2"; // pk
+        String encodedGlobalGroupId = TestUtils.INSTANCE_FI + ":" + TestUtils.GLOBALGROUP;
+        Set<String> serviceCodes = new HashSet<>(Arrays.asList(
+                "calculatePrime", "openapi-servicecode", "rest-servicecode"));
+        AccessRights accessRights = new AccessRights();
+        accessRights.addItemsItem(new AccessRight().serviceCode("calculatePrime"));
+        accessRights.addItemsItem(new AccessRight().serviceCode("openapi-servicecode"));
+        accessRights.addItemsItem(new AccessRight().serviceCode("rest-servicecode"));
+
+        ResponseEntity<List<AccessRight>> response = clientsApiController
+                .addServiceClientAccessRights(encodedOwnerId, encodedSubsystemId, accessRights);
+        assertEquals(HttpStatus.CREATED, response.getStatusCode());
+        assertEquals(3, response.getBody().size());
+        AccessRight accessRight = findAccessRight("calculatePrime", response.getBody());
+        assertNotNull(accessRight);
+        assertEquals("calculatePrime-title", accessRight.getServiceTitle());
+        assertNotNull(accessRight.getRightsGivenAt());
+        assertNotNull(findAccessRight("openapi-servicecode", response.getBody()));
+        assertNotNull(findAccessRight("rest-servicecode", response.getBody()));
+
+        response = clientsApiController.addServiceClientAccessRights(
+                encodedOwnerId, encodedLocalGroupId, accessRights);
+        assertEquals(HttpStatus.CREATED, response.getStatusCode());
+        assertEquals(3, response.getBody().size());
+
+        response = clientsApiController.addServiceClientAccessRights(
+                encodedOwnerId, encodedGlobalGroupId, accessRights);
+        assertEquals(HttpStatus.CREATED, response.getStatusCode());
+        assertEquals(3, response.getBody().size());
+
+        try {
+            // try to add duplicate
+            clientsApiController.addServiceClientAccessRights(encodedOwnerId, encodedGlobalGroupId, accessRights);
+            fail("should throw exception");
+        } catch (ConflictException expected) {
+        }
+    }
+
+    private AccessRight findAccessRight(String serviceCode, List<AccessRight> accessRights) {
+        return accessRights.stream()
+                .filter(dto -> dto.getServiceCode().equals(serviceCode))
+                .findFirst()
+                .orElse(null);
+    }
 }

@@ -1,5 +1,6 @@
 /**
  * The MIT License
+ * Copyright (c) 2019- Nordic Institute for Interoperability Solutions (NIIS)
  * Copyright (c) 2018 Estonian Information System Authority (RIA),
  * Nordic Institute for Interoperability Solutions (NIIS), Population Register Centre (VRK)
  * Copyright (c) 2015-2017 Estonian Information System Authority (RIA), Population Register Centre (VRK)
@@ -30,7 +31,7 @@ import ee.ria.xroad.common.certificateprofile.DnFieldValue;
 import ee.ria.xroad.common.certificateprofile.impl.DnFieldValueImpl;
 
 import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.lang.StringUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.niis.xroad.restapi.exceptions.ErrorDeviation;
 import org.springframework.stereotype.Component;
 
@@ -40,6 +41,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
+
+import static org.niis.xroad.restapi.exceptions.DeviationCodes.ERROR_INVALID_DN_PARAMETER;
 
 /**
  * helper for working with DnFieldValues and -Descriptions
@@ -102,8 +105,6 @@ public class DnFieldHelper {
      * Thrown if a subject dn parameter was invalid
      */
     public static class InvalidDnParameterException extends ServiceException {
-        public static final String ERROR_INVALID_DN_PARAMETER = "invalid_dn_parameter";
-
         public InvalidDnParameterException(Throwable t) {
             super(t, new ErrorDeviation(ERROR_INVALID_DN_PARAMETER));
         }

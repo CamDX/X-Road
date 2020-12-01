@@ -1,5 +1,6 @@
 /**
  * The MIT License
+ * Copyright (c) 2019- Nordic Institute for Interoperability Solutions (NIIS)
  * Copyright (c) 2018 Estonian Information System Authority (RIA),
  * Nordic Institute for Interoperability Solutions (NIIS), Population Register Centre (VRK)
  * Copyright (c) 2015-2017 Estonian Information System Authority (RIA), Population Register Centre (VRK)
@@ -30,6 +31,7 @@ import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.compress.archivers.tar.TarArchiveEntry;
 import org.apache.commons.compress.archivers.tar.TarArchiveInputStream;
+import org.niis.xroad.restapi.config.audit.AuditDataHelper;
 import org.niis.xroad.restapi.dto.BackupFile;
 import org.niis.xroad.restapi.exceptions.DeviationAwareRuntimeException;
 import org.niis.xroad.restapi.exceptions.ErrorDeviation;
@@ -52,6 +54,9 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 
+import static org.niis.xroad.restapi.exceptions.DeviationCodes.ERROR_BACKUP_GENERATION_FAILED;
+import static org.niis.xroad.restapi.exceptions.DeviationCodes.WARNING_FILE_ALREADY_EXISTS;
+
 /**
  * Backups service.
  */
@@ -59,13 +64,10 @@ import java.util.Optional;
 @Service
 @PreAuthorize("isAuthenticated()")
 public class BackupService {
-
-    private static final String BACKUP_GENERATION_FAILED = "backup_generation_failed";
-    private static final String WARNING_FILE_ALREADY_EXISTS = "warning_file_already_exists";
-
     private final BackupRepository backupRepository;
     private final ServerConfService serverConfService;
     private final ExternalProcessRunner externalProcessRunner;
+    private final AuditDataHelper auditDataHelper;
 
     @Setter
     private String generateBackupScriptPath;
@@ -77,12 +79,14 @@ public class BackupService {
      */
     @Autowired
     public BackupService(BackupRepository backupRepository, ServerConfService serverConfService,
-                         ExternalProcessRunner externalProcessRunner,
-                         @Value("${script.generate-backup.path}") String generateBackupScriptPath) {
+            ExternalProcessRunner externalProcessRunner,
+            @Value("${script.generate-backup.path}") String generateBackupScriptPath,
+            AuditDataHelper auditDataHelper) {
         this.backupRepository = backupRepository;
         this.serverConfService = serverConfService;
         this.externalProcessRunner = externalProcessRunner;
         this.generateBackupScriptPath = generateBackupScriptPath;
+        this.auditDataHelper = auditDataHelper;
     }
 
     /**
@@ -103,6 +107,7 @@ public class BackupService {
      * @throws BackupFileNotFoundException if backup file is not found
      */
     public void deleteBackup(String filename) throws BackupFileNotFoundException {
+        auditDataHelper.putBackupFilename(backupRepository.getFilePath(filename));
         if (!getBackup(filename).isPresent()) {
             throw new BackupFileNotFoundException(getFileNotFoundExceptionMessage(filename));
         }
@@ -132,7 +137,8 @@ public class BackupService {
     public BackupFile generateBackup() throws InterruptedException {
         SecurityServerId securityServerId = serverConfService.getSecurityServerId();
         String filename = generateBackupFileName();
-        String fullPath =  backupRepository.getConfigurationBackupPath() + filename;
+        auditDataHelper.putBackupFilename(backupRepository.getFilePath(filename));
+        String fullPath = backupRepository.getConfigurationBackupPath() + filename;
         String[] args = new String[] {"-s", securityServerId.toShortString(), "-f", fullPath};
 
         try {
@@ -146,14 +152,13 @@ public class BackupService {
             log.info(String.join("\n", processResult.getProcessOutput()));
             log.info(" --- Backup script console output - END --- ");
         } catch (ProcessNotExecutableException | ProcessFailedException e) {
-            log.error("Failed to generate backup", e);
-            throw new DeviationAwareRuntimeException(e, new ErrorDeviation(BACKUP_GENERATION_FAILED));
+            throw new DeviationAwareRuntimeException(e, new ErrorDeviation(ERROR_BACKUP_GENERATION_FAILED));
         }
 
         Optional<BackupFile> backupFile = getBackup(filename);
         if (!backupFile.isPresent()) {
             throw new DeviationAwareRuntimeException(getFileNotFoundExceptionMessage(filename),
-                    new ErrorDeviation(BACKUP_GENERATION_FAILED));
+                    new ErrorDeviation(ERROR_BACKUP_GENERATION_FAILED));
         }
         return backupFile.get();
     }
@@ -173,6 +178,7 @@ public class BackupService {
      */
     public BackupFile uploadBackup(Boolean ignoreWarnings, String filename, byte[] fileBytes)
             throws InvalidFilenameException, UnhandledWarningsException, InvalidBackupFileException {
+        auditDataHelper.putBackupFilename(backupRepository.getFilePath(filename));
         if (!FormatUtils.isValidBackupFilename(filename)) {
             throw new InvalidFilenameException("uploading backup file failed because of invalid filename ("
                     + filename + ")");

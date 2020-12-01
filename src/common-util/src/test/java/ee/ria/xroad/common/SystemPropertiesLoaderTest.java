@@ -1,5 +1,6 @@
 /**
  * The MIT License
+ * Copyright (c) 2019- Nordic Institute for Interoperability Solutions (NIIS)
  * Copyright (c) 2018 Estonian Information System Authority (RIA),
  * Nordic Institute for Interoperability Solutions (NIIS), Population Register Centre (VRK)
  * Copyright (c) 2015-2017 Estonian Information System Authority (RIA), Population Register Centre (VRK)
@@ -73,7 +74,7 @@ public class SystemPropertiesLoaderTest {
     @Test
     public void loadPropertiesOneFileOneSection() {
         Map<String, String> p =
-                load(f("system-properties-1.ini"), "section1");
+                load(f("src/test/resources/system-properties-1.ini"), "section1");
         assertEquals("value1", p.get("section1.foo-key1"));
         assertEquals("value2", p.get("section1.foo-key2"));
         assertEquals("value3", p.get("section1.foo-key3"));
@@ -87,7 +88,7 @@ public class SystemPropertiesLoaderTest {
     @Test
     public void loadPropertiesOneFileMultipleSections() {
         Map<String, String> p =
-                load(f("system-properties-1.ini"), "section1", "section2");
+                load(f("src/test/resources/system-properties-1.ini"), "section1", "section2");
         assertEquals("value4", p.get("section2.foo-key1"));
         assertEquals("value5", p.get("section2.foo-key2"));
         assertEquals("value3", p.get("section1.foo-key3"));
@@ -99,7 +100,7 @@ public class SystemPropertiesLoaderTest {
     @Test
     public void loadPropertiesMultipleFilesOneSection() {
         Map<String, String> p =
-                load(f("system-properties-1.ini", "system-properties-2.ini"),
+                load(f("src/test/resources/system-properties-1.ini", "src/test/resources/system-properties-2.ini"),
                         "section1");
         assertEquals("valueX", p.get("section1.foo-key1"));
         assertEquals("valueY", p.get("section1.foo-key2"));
@@ -112,7 +113,7 @@ public class SystemPropertiesLoaderTest {
     @Test
     public void loadPropertiesMultipleFilesMultipleSections() {
         Map<String, String> p =
-                load(f("system-properties-1.ini", "system-properties-2.ini"),
+                load(f("src/test/resources/system-properties-1.ini", "src/test/resources/system-properties-2.ini"),
                         "section1", "section2", "jvm");
         assertEquals("valueFoo", p.get("section2.foo-key1"));
         assertEquals("valueY", p.get("section1.foo-key2"));

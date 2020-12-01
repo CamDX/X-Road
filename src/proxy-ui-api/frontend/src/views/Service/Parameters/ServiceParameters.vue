@@ -1,13 +1,38 @@
+<!--
+   The MIT License
+   Copyright (c) 2019- Nordic Institute for Interoperability Solutions (NIIS)
+   Copyright (c) 2018 Estonian Information System Authority (RIA),
+   Nordic Institute for Interoperability Solutions (NIIS), Population Register Centre (VRK)
+   Copyright (c) 2015-2017 Estonian Information System Authority (RIA), Population Register Centre (VRK)
+
+   Permission is hereby granted, free of charge, to any person obtaining a copy
+   of this software and associated documentation files (the "Software"), to deal
+   in the Software without restriction, including without limitation the rights
+   to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+   copies of the Software, and to permit persons to whom the Software is
+   furnished to do so, subject to the following conditions:
+
+   The above copyright notice and this permission notice shall be included in
+   all copies or substantial portions of the Software.
+
+   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+   IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+   FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+   AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+   LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+   OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+   THE SOFTWARE.
+ -->
 <template>
   <div class="xrd-tab-max-width xrd-view-common">
-    <div class="apply-to-all">
-      <div class="apply-to-all-text">{{$t('services.applyToAll')}}</div>
+    <div class="apply-to-all" v-if="showApplyToAll">
+      <div class="apply-to-all-text">{{ $t('services.applyToAll') }}</div>
     </div>
 
-    <ValidationObserver ref="form" v-slot="{ validate, invalid }">
+    <ValidationObserver ref="form" v-slot="{ invalid }">
       <div class="edit-row">
         <div class="edit-title">
-          {{$t('services.serviceUrl')}}
+          {{ $t('services.serviceUrl') }}
           <helpIcon :text="$t('services.urlTooltip')" />
         </div>
 
@@ -20,17 +45,19 @@
           >
             <v-text-field
               v-model="service.url"
-              @input="setTouched()"
+              @input="changeUrl()"
               single-line
               class="description-input"
               name="serviceUrl"
               :error-messages="errors"
               data-test="service-url"
+              :disabled="!canEdit"
             ></v-text-field>
           </ValidationProvider>
         </div>
 
         <v-checkbox
+          v-if="showApplyToAll"
           @change="setTouched()"
           v-model="url_all"
           color="primary"
@@ -41,7 +68,7 @@
 
       <div class="edit-row">
         <div class="edit-title">
-          {{$t('services.timeoutSec')}}
+          {{ $t('services.timeoutSec') }}
           <helpIcon :text="$t('services.timeoutTooltip')" />
         </div>
         <div class="edit-input">
@@ -56,9 +83,10 @@
               single-line
               @input="setTouched()"
               type="number"
-              style="max-width: 200px;"
+              style="max-width: 200px"
               name="serviceTimeout"
               :error-messages="errors"
+              :disabled="!canEdit"
               data-test="service-timeout"
             ></v-text-field>
           </ValidationProvider>
@@ -66,6 +94,7 @@
         </div>
 
         <v-checkbox
+          v-if="showApplyToAll"
           @change="setTouched()"
           v-model="timeout_all"
           color="primary"
@@ -76,12 +105,12 @@
 
       <div class="edit-row">
         <div class="edit-title">
-          {{$t('services.verifyTls')}}
+          {{ $t('services.verifyTls') }}
           <helpIcon :text="$t('services.tlsTooltip')" />
         </div>
         <div class="edit-input">
           <v-checkbox
-            :disabled="!isHttps"
+            :disabled="!isHttpsMethod() || !canEdit"
             @change="setTouched()"
             v-model="service.ssl_auth"
             color="primary"
@@ -91,6 +120,7 @@
         </div>
 
         <v-checkbox
+          v-if="showApplyToAll"
           @change="setTouched()"
           v-model="ssl_auth_all"
           color="primary"
@@ -101,49 +131,57 @@
 
       <div class="button-wrap">
         <large-button
-          :disabled="invalid || disableSave"
-          @click="save()"
+          v-if="canEdit"
+          :disabled="invalid || disableSave"
+          :loading="saving"
+          @click="save(false)"
           data-test="save-service-parameters"
-        >{{$t('action.save')}}</large-button>
+          >{{ $t('action.save') }}</large-button
+        >
       </div>
     </ValidationObserver>
 
     <div class="group-members-row">
-      <div class="row-title">{{$t('accessRights.title')}}</div>
+      <div class="row-title">{{ $t('accessRights.title') }}</div>
       <div class="row-buttons">
         <large-button
           :disabled="!hasServiceClients"
+          v-if="canEdit"
           outlined
           @click="removeAllServiceClients()"
           data-test="remove-subjects"
-        >{{$t('action.removeAll')}}</large-button>
+          >{{ $t('action.removeAll') }}</large-button
+        >
         <large-button
+          v-if="canEdit"
           outlined
           class="add-members-button"
           @click="showAddServiceClientDialog()"
           data-test="show-add-subjects"
-        >{{$t('accessRights.addServiceClients')}}</large-button>
+          >{{ $t('accessRights.addServiceClients') }}</large-button
+        >
       </div>
     </div>
 
     <v-card flat>
       <table class="xrd-table group-members-table">
         <tr>
-          <th>{{$t('services.memberNameGroupDesc')}}</th>
-          <th>{{$t('services.idGroupCode')}}</th>
-          <th>{{$t('type')}}</th>
-          <th>{{$t('accessRights.rightsGiven')}}</th>
+          <th>{{ $t('services.memberNameGroupDesc') }}</th>
+          <th>{{ $t('services.idGroupCode') }}</th>
+          <th>{{ $t('type') }}</th>
+          <th>{{ $t('accessRights.rightsGiven') }}</th>
           <th></th>
         </tr>
         <template v-if="serviceClients">
           <tr v-for="sc in serviceClients" v-bind:key="sc.id">
-            <td>{{sc.name}}</td>
-            <td>{{sc.id}}</td>
-            <td>{{sc.service_client_type}}</td>
-            <td>{{sc.rights_given_at | formatDateTime}}</td>
+            <td class="identifier-wrap">{{ sc.name }}</td>
+            <td class="identifier-wrap">{{ sc.id }}</td>
+            <td>{{ sc.service_client_type }}</td>
+            <td>{{ sc.rights_given_at | formatDateTime }}</td>
             <td>
               <div class="button-wrap">
                 <v-btn
+                  v-if="canEdit"
                   small
                   outlined
                   rounded
@@ -151,7 +189,8 @@
                   class="xrd-small-button"
                   @click="removeServiceClient(sc)"
                   data-test="remove-subject"
-                >{{$t('action.remove')}}</v-btn>
+                  >{{ $t('action.remove') }}</v-btn
+                >
               </div>
             </td>
           </tr>
@@ -159,15 +198,17 @@
       </table>
 
       <div class="footer-buttons-wrap">
-        <large-button @click="close()" data-test="close">{{$t('action.close')}}</large-button>
+        <large-button @click="close()" data-test="close">{{
+          $t('action.close')
+        }}</large-button>
       </div>
     </v-card>
 
     <!-- Confirm dialog remove Access Right service clients -->
     <confirmDialog
       :dialog="confirmMember"
-      title="localGroup.removeTitle"
-      text="localGroup.removeText"
+      title="accessRights.removeTitle"
+      text="accessRights.removeText"
       @cancel="confirmMember = false"
       @accept="doRemoveServiceClient()"
     />
@@ -175,8 +216,8 @@
     <!-- Confirm dialog remove all Access Right service clients -->
     <confirmDialog
       :dialog="confirmAllServiceClients"
-      title="localGroup.removeAllTitle"
-      text="localGroup.removeAllText"
+      title="accessRights.removeAllTitle"
+      text="accessRights.removeAllText"
       @cancel="confirmAllServiceClients = false"
       @accept="doRemoveAllServiveClient()"
     />
@@ -188,12 +229,19 @@
       :clientId="clientId"
       title="accessRights.addServiceClientsTitle"
       @cancel="closeAccessRightsDialog"
-      @serviceClientsAdded="doAddServiceClient"
+      @service-clients-added="doAddServiceClient"
+    />
+
+    <!-- Warning dialog when service parameters are saved -->
+    <warningDialog
+      :dialog="warningDialog"
+      :warnings="warningInfo"
+      localizationParent="services.service_parameters_ssl_test_warnings"
+      @cancel="cancelSubmit()"
+      @accept="acceptWarnings()"
     />
   </div>
 </template>
-
-
 
 <script lang="ts">
 import Vue from 'vue';
@@ -202,10 +250,13 @@ import AccessRightsDialog from '../AccessRightsDialog.vue';
 import ConfirmDialog from '@/components/ui/ConfirmDialog.vue';
 import HelpIcon from '@/components/ui/HelpIcon.vue';
 import LargeButton from '@/components/ui/LargeButton.vue';
+import WarningDialog from '@/components/ui/WarningDialog.vue';
 import { ValidationObserver, ValidationProvider } from 'vee-validate';
 import { mapGetters } from 'vuex';
-import { RouteName } from '@/global';
-import {ServiceClient} from '@/types';
+import { RouteName, Permissions } from '@/global';
+import { ServiceClient, ServiceClients, ServiceUpdate } from '@/openapi-types';
+import { ServiceTypeEnum } from '@/domain';
+import { encodePathParameter } from '@/util/api';
 
 type NullableServiceClient = undefined | ServiceClient;
 
@@ -215,6 +266,7 @@ export default Vue.extend({
     ConfirmDialog,
     HelpIcon,
     LargeButton,
+    WarningDialog,
     ValidationProvider,
     ValidationObserver,
   },
@@ -230,25 +282,25 @@ export default Vue.extend({
   },
   data() {
     return {
-      touched: false,
-      confirmGroup: false,
-      confirmMember: false,
-      confirmAllServiceClients: false,
+      touched: false as boolean,
+      confirmGroup: false as boolean,
+      confirmMember: false as boolean,
+      confirmAllServiceClients: false as boolean,
       selectedMember: undefined as NullableServiceClient,
-      description: undefined,
-      url: '',
-      addServiceClientDialogVisible: false,
-      timeout: 23,
-      url_all: false,
-      timeout_all: false,
-      ssl_auth_all: false,
+      url: '' as string,
+      addServiceClientDialogVisible: false as boolean,
+      timeout: 23 as number,
+      url_all: false as boolean,
+      timeout_all: false as boolean,
+      ssl_auth_all: false as boolean,
+      warningInfo: [] as string[],
+      warningDialog: false as boolean,
+      saving: false as boolean,
     };
   },
   computed: {
     ...mapGetters(['service', 'serviceClients']),
-    isHttps(): boolean {
-      return this.service.url.startsWith('https');
-    },
+
     hasServiceClients(): boolean {
       return this.serviceClients?.length > 0;
     },
@@ -256,23 +308,59 @@ export default Vue.extend({
       // service is undefined --> can't save OR inputs are not touched
       return !this.service || !this.touched;
     },
+    showApplyToAll(): boolean {
+      return (
+        this.$route.query.descriptionType === ServiceTypeEnum.WSDL &&
+        this.$store.getters.hasPermission(Permissions.EDIT_SERVICE_PARAMS)
+      );
+    },
+    canEdit(): boolean {
+      return this.$store.getters.hasPermission(Permissions.EDIT_SERVICE_PARAMS);
+    },
   },
 
   methods: {
-    save(): void {
+    cancelSubmit(): void {
+      this.warningDialog = false;
+    },
+    acceptWarnings(): void {
+      this.warningDialog = false;
+      this.save(true);
+    },
+    save(ignoreWarnings: boolean): void {
+      /**
+       * For the current service backend returns ssl_auth as undefined if current service is using http.
+       * If service is https then it can be either false or true. When saving service parameters however the ssl_auth
+       * must be a boolean even if the service is using http. Backend will handle saving correct data.
+       */
+      const serviceUpdate: ServiceUpdate = {
+        url: this.service.url,
+        timeout: this.service.timeout,
+        ssl_auth: this.service.ssl_auth ?? false, // set false as backup as backend takes boolean
+        timeout_all: this.timeout_all,
+        url_all: this.url_all,
+        ssl_auth_all: this.ssl_auth_all,
+        ignore_warnings: ignoreWarnings,
+      };
+
+      this.saving = true;
       api
-        .patch(`/services/${this.serviceId}`, {
-          service: this.service,
-          timeout_all: this.timeout_all,
-          url_all: this.url_all,
-          ssl_auth_all: this.ssl_auth_all,
-        })
+        .patch(
+          `/services/${encodePathParameter(this.serviceId)}`,
+          serviceUpdate,
+        )
         .then(() => {
           this.$store.dispatch('showSuccess', 'Service saved');
         })
         .catch((error) => {
-          this.$store.dispatch('showError', error);
-        });
+          if (error?.response?.data?.warnings) {
+            this.warningInfo = error.response.data.warnings;
+            this.warningDialog = true;
+          } else {
+            this.$store.dispatch('showError', error);
+          }
+        })
+        .finally(() => (this.saving = false));
     },
 
     setTouched(): void {
@@ -281,7 +369,7 @@ export default Vue.extend({
 
     fetchData(serviceId: string): void {
       api
-        .get(`/services/${serviceId}/service-clients`)
+        .get(`/services/${encodePathParameter(serviceId)}/service-clients`)
         .then((res) => {
           this.$store.dispatch('setServiceClients', res.data);
         })
@@ -294,15 +382,21 @@ export default Vue.extend({
       this.addServiceClientDialogVisible = true;
     },
 
-    doAddServiceClient(selected: any[]): void {
+    doAddServiceClient(selected: ServiceClient[]): void {
       this.addServiceClientDialogVisible = false;
 
       api
-        .post(`/services/${this.serviceId}/service-clients`, {
-          items: selected,
-        })
+        .post(
+          `/services/${encodePathParameter(this.serviceId)}/service-clients`,
+          {
+            items: selected,
+          } as ServiceClients,
+        )
         .then(() => {
-          this.$store.dispatch('showSuccess', 'accessRights.addServiceClientsSuccess');
+          this.$store.dispatch(
+            'showSuccess',
+            'accessRights.addServiceClientsSuccess',
+          );
           this.fetchData(this.serviceId);
         })
         .catch((error) => {
@@ -319,7 +413,7 @@ export default Vue.extend({
     },
 
     doRemoveAllServiveClient(): void {
-      const items: any[] = this.serviceClients.map( (sc: ServiceClient) => ({
+      const items = this.serviceClients.map((sc: ServiceClient) => ({
         id: sc.id,
         service_client_type: sc.service_client_type,
       }));
@@ -327,7 +421,7 @@ export default Vue.extend({
       this.removeServiceClients(items);
       this.confirmAllServiceClients = false;
     },
-    removeServiceClient(member: any): void {
+    removeServiceClient(member: NullableServiceClient): void {
       this.confirmMember = true;
       this.selectedMember = member;
     },
@@ -344,17 +438,25 @@ export default Vue.extend({
 
     removeServiceClients(serviceClients: ServiceClient[]) {
       api
-        .post(`/services/${this.serviceId}/service-clients/delete`, {
-          items: serviceClients,
-        })
+        .post(
+          `/services/${encodePathParameter(
+            this.serviceId,
+          )}/service-clients/delete`,
+          {
+            items: serviceClients,
+          },
+        )
         .then(() => {
-          this.$store.dispatch('showSuccess', 'accessRights.removeServiceClientsSuccess');
+          this.$store.dispatch(
+            'showSuccess',
+            'accessRights.removeServiceClientsSuccess',
+          );
         })
         .catch((error) => {
           this.$store.dispatch('showError', error);
         })
         .finally(() => {
-          this.$emit('updateService', this.service.id);
+          this.$emit('update-service', this.service.id);
         });
     },
     close() {
@@ -363,12 +465,13 @@ export default Vue.extend({
         params: { id: this.clientId },
       });
     },
-  },
-  watch: {
-    isHttps(val) {
-      // If user edits http to https --> change "ssl auth" to true
-      if (val === true) {
-        this.service.ssl_auth = true;
+    isHttpsMethod(): boolean {
+      return this.service.url.startsWith('https');
+    },
+    changeUrl(): void {
+      this.setTouched();
+      if (!this.isHttpsMethod() && this.service.ssl_auth === true) {
+        this.service.ssl_auth = false;
       }
     },
   },
@@ -409,15 +512,14 @@ export default Vue.extend({
     align-content: center;
     width: 100%;
   }
-}
 
-.edit-row > *:last-child {
-  margin-left: 20px;
-  width: 100px;
-  max-width: 100px;
-  min-width: 100px;
-  margin-left: auto;
-  margin-right: 0;
+  & > .table-checkbox:last-child {
+    width: 100px;
+    max-width: 100px;
+    min-width: 100px;
+    margin-left: auto;
+    margin-right: 0;
+  }
 }
 
 .group-members-row {
@@ -468,4 +570,3 @@ export default Vue.extend({
   padding-top: 20px;
 }
 </style>
-

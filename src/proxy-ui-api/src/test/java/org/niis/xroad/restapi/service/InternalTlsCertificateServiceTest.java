@@ -1,5 +1,6 @@
 /**
  * The MIT License
+ * Copyright (c) 2019- Nordic Institute for Interoperability Solutions (NIIS)
  * Copyright (c) 2018 Estonian Information System Authority (RIA),
  * Nordic Institute for Interoperability Solutions (NIIS), Population Register Centre (VRK)
  * Copyright (c) 2015-2017 Estonian Information System Authority (RIA), Population Register Centre (VRK)
@@ -36,6 +37,7 @@ import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
+import org.niis.xroad.restapi.config.audit.AuditDataHelper;
 import org.niis.xroad.restapi.exceptions.DeviationAwareRuntimeException;
 import org.niis.xroad.restapi.repository.InternalTlsCertificateRepository;
 import org.niis.xroad.restapi.util.CertificateTestUtils;
@@ -54,7 +56,8 @@ import java.util.Map;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
-import static org.niis.xroad.restapi.service.InternalTlsCertificateService.KEY_CERT_GENERATION_FAILED;
+import static org.mockito.Mockito.mock;
+import static org.niis.xroad.restapi.exceptions.DeviationCodes.ERROR_KEY_CERT_GENERATION_FAILED;
 
 /**
  * test InternalTlsCertificateService
@@ -89,7 +92,7 @@ public class InternalTlsCertificateServiceTest {
                     }
                     throw new RuntimeException("TEST command not supported");
                 }
-            }, null, SCRIPT_ARGS);
+            }, null, SCRIPT_ARGS, mock(AuditDataHelper.class));
 
     @Before
     public void setup() throws Exception {
@@ -165,7 +168,7 @@ public class InternalTlsCertificateServiceTest {
         try {
             internalTlsCertificateService.generateInternalTlsKeyAndCertificate();
         } catch (DeviationAwareRuntimeException e) {
-            assertEquals(KEY_CERT_GENERATION_FAILED, e.getErrorDeviation().getCode());
+            assertEquals(ERROR_KEY_CERT_GENERATION_FAILED, e.getErrorDeviation().getCode());
         }
     }
 
@@ -175,7 +178,7 @@ public class InternalTlsCertificateServiceTest {
         try {
             internalTlsCertificateService.generateInternalTlsKeyAndCertificate();
         } catch (DeviationAwareRuntimeException e) {
-            assertEquals(KEY_CERT_GENERATION_FAILED, e.getErrorDeviation().getCode());
+            assertEquals(ERROR_KEY_CERT_GENERATION_FAILED, e.getErrorDeviation().getCode());
         }
     }
 

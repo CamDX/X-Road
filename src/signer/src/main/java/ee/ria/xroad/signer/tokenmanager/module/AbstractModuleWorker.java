@@ -1,5 +1,6 @@
 /**
  * The MIT License
+ * Copyright (c) 2019- Nordic Institute for Interoperability Solutions (NIIS)
  * Copyright (c) 2018 Estonian Information System Authority (RIA),
  * Nordic Institute for Interoperability Solutions (NIIS), Population Register Centre (VRK)
  * Copyright (c) 2015-2017 Estonian Information System Authority (RIA), Population Register Centre (VRK)
@@ -48,7 +49,14 @@ public abstract class AbstractModuleWorker extends AbstractUpdateableActor {
 
     @Override
     public SupervisorStrategy supervisorStrategy() {
-        return new OneForOneStrategy(-1, Duration.Inf(), t -> SupervisorStrategy.resume());
+        return new OneForOneStrategy(-1, Duration.Inf(),
+                t -> {
+                    if (t instanceof Error) {
+                        return SupervisorStrategy.escalate();
+                    } else {
+                        return SupervisorStrategy.resume();
+                    }
+                });
     }
 
     @Override
@@ -92,6 +100,7 @@ public abstract class AbstractModuleWorker extends AbstractUpdateableActor {
     }
 
     protected abstract void initializeModule() throws Exception;
+
     protected abstract void deinitializeModule() throws Exception;
 
     protected abstract List<TokenType> listTokens() throws Exception;

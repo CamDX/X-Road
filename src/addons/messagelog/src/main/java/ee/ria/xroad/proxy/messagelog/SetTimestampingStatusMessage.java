@@ -1,5 +1,6 @@
 /**
  * The MIT License
+ * Copyright (c) 2019- Nordic Institute for Interoperability Solutions (NIIS)
  * Copyright (c) 2018 Estonian Information System Authority (RIA),
  * Nordic Institute for Interoperability Solutions (NIIS), Population Register Centre (VRK)
  * Copyright (c) 2015-2017 Estonian Information System Authority (RIA), Population Register Centre (VRK)
@@ -27,7 +28,8 @@ package ee.ria.xroad.proxy.messagelog;
 import akka.dispatch.ControlMessage;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
-import org.joda.time.DateTime;
+
+import java.time.Instant;
 
 @Data
 @RequiredArgsConstructor
@@ -43,7 +45,7 @@ class SetTimestampingStatusMessage implements ControlMessage {
     /**
      * Time when the status was achieved
      */
-    private final DateTime atTime;
+    private final Instant atTime;
 
     /**
      * Constructor that sets status change timestamp to current time.
@@ -51,7 +53,7 @@ class SetTimestampingStatusMessage implements ControlMessage {
      */
     SetTimestampingStatusMessage(Status status) {
         this.status = status;
-        this.atTime = new DateTime();
+        this.atTime = Instant.now();
     }
 }
 

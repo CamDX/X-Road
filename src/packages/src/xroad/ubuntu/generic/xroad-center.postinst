@@ -26,6 +26,10 @@ abort() {
 log() { echo "xroad-center: $*" >&2; }
 get_prop() { crudini --get "$1" '' "$2" 2>/dev/null || echo -n "$3"; }
 
+gen_pw() {
+  head -c 24 /dev/urandom | base64 | tr "/+" "_-"
+}
+
 handle_error() {
     ERR=$(</tmp/cert.err)
     db_subst xroad-common/cert-generation-abort ERR "$(printf %s "$ERR" | debconf-escape -e)"
@@ -47,7 +51,7 @@ setup_database() {
     crudini --set "${db_properties}" '' port "${db_port}"
 
     local db_user=$(get_prop ${db_properties} 'username' 'centerui')
-    local db_schema=$(get_prop ${db_properties} 'schema' "$db_user")
+    local db_schema=$(get_prop ${db_properties} 'schema' "${db_user%%@*}")
     local db_password=$(get_prop ${db_properties} 'password' 'centerui')
     local db_database=$(get_prop ${db_properties} 'database' 'centerui_production')
     local db_master_user=postgres
@@ -66,32 +70,44 @@ setup_database() {
         local db_master_passwd=$(get_prop ${root_properties} postgres.connection.password)
         db_master_user=$(get_prop ${root_properties} postgres.connection.user 'postgres')
         function psql_master() {
-            PGPASSWORD="${db_master_passwd}" PGUSER="${db_master_user}" remote_psql "$@"
+            PGDATABASE="postgres" PGPASSWORD="${db_master_passwd}" PGUSER="${db_master_user}" remote_psql "$@"
         }
     else
         function psql_master() { local_psql "$@"; }
     fi
 
+    local db_plain_user=${db_user%%@*}
+    local db_plain_master=${db_master_user%%@*}
+
     if PGCONNECT_TIMEOUT=5 psql_dbuser -c "\q" &>/dev/null; then
         log "Database and user exists, skipping database creation."
+
+        if [ "$db_schema" != "public" ]; then
+          if [[ $(psql_dbuser -c "SELECT 1 from public.schema_migrations limit 1;" 2>/dev/null) != "1" ]]; then
+            psql_dbuser -c "CREATE SCHEMA IF NOT EXISTS \"${db_schema}\"" || abort "Creating schema '$db_schema' failed."
+          fi
+        fi
     else
+        db_password=$(gen_pw)
         psql_master <<EOF || abort "Creating database '${db_database}' on '${db_host}' failed."
 CREATE DATABASE "${db_database}" ENCODING 'UTF8';
 REVOKE ALL ON DATABASE "${db_database}" FROM PUBLIC;
 DO \$\$
 BEGIN
-  CREATE ROLE "${db_user}" LOGIN PASSWORD '${db_password}';
-  GRANT "${db_user}" to "${db_master_user}";
+  CREATE ROLE "${db_plain_user}" LOGIN PASSWORD '${db_password}';
+  GRANT "${db_plain_user}" to "${db_plain_master}";
   EXCEPTION WHEN OTHERS THEN
-    RAISE NOTICE 'User $db_user already exists';
+    RAISE NOTICE 'User $db_plain_user already exists';
 END\$\$;
-GRANT CREATE,TEMPORARY,CONNECT ON DATABASE "${db_database}" TO "${db_user}";
+GRANT CREATE,TEMPORARY,CONNECT ON DATABASE "${db_database}" TO "${db_plain_user}";
 \c "${db_database}"
 CREATE EXTENSION hstore;
-CREATE SCHEMA "${db_schema}" AUTHORIZATION "${db_user}";
+CREATE SCHEMA "${db_schema}" AUTHORIZATION "${db_plain_user}";
 REVOKE ALL ON SCHEMA public FROM PUBLIC;
-GRANT USAGE ON SCHEMA public to "${db_user}";
+GRANT USAGE ON SCHEMA public to "${db_plain_user}";
 EOF
+        crudini --set "${db_properties}" '' schema "${db_schema}"
+        crudini --set "${db_properties}" '' password "${db_password}"
     fi
 
     if [[ $(psql_dbuser -c "SELECT max(version) <= '20191211104400' from public.schema_migrations;" 2>/dev/null) == "t" ]]; then
@@ -99,12 +115,13 @@ EOF
         if ! detect_bdr; then
             psql_master --single-transaction -d "$db_database" <<EOF || abort "Renaming public schema to '$db_schema' failed."
 ALTER SCHEMA public RENAME TO "${db_schema}";
-ALTER SCHEMA "${db_schema}" OWNER TO "${db_user}";
+ALTER SCHEMA "${db_schema}" OWNER TO "${db_plain_user}";
 REVOKE ALL ON SCHEMA "${db_schema}" FROM PUBLIC;
 CREATE SCHEMA public;
-GRANT USAGE ON SCHEMA public TO "${db_user}";
+GRANT USAGE ON SCHEMA public TO "${db_plain_user}";
 ALTER EXTENSION hstore SET SCHEMA public;
 EOF
+        crudini --set "${db_properties}" '' schema "${db_schema}"
         else
             log "PostgreSQL BDR 1.0 detected, not migrating the 'public' schema."
             log "Manually migrate the 'public' schema to keep built-in database backup/restore functionality."
@@ -112,10 +129,6 @@ EOF
             db_schema="public"
             crudini --set "${db_properties}" '' schema "${db_schema}"
         fi
-    fi
-
-    if [ "$db_schema" != "public" ]; then
-        psql_dbuser -c "CREATE SCHEMA IF NOT EXISTS \"${db_schema}\"" || abort "Creating schema '$db_schema' failed."
     fi
 
     /usr/share/xroad/db/migrate.sh db:migrate || abort "Database migration failed. ABORTING."

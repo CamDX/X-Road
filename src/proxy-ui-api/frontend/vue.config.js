@@ -1,7 +1,8 @@
 module.exports = {
   devServer: {
     proxy: process.env.PROXY_ADDRESS || 'https://localhost:4100',
-    https: true
+    host: 'localhost',
+    https: true,
   },
 
   pluginOptions: {
@@ -9,7 +10,7 @@ module.exports = {
       locale: 'en',
       fallbackLocale: 'en',
       localeDir: 'locales',
-      enableInSFC: false
-    }
-  }
-}
+      enableInSFC: false,
+    },
+  },
+};

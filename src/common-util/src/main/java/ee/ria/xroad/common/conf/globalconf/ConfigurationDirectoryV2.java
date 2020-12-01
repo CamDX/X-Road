@@ -1,5 +1,6 @@
 /**
  * The MIT License
+ * Copyright (c) 2019- Nordic Institute for Interoperability Solutions (NIIS)
  * Copyright (c) 2018 Estonian Information System Authority (RIA),
  * Nordic Institute for Interoperability Solutions (NIIS), Population Register Centre (VRK)
  * Copyright (c) 2015-2017 Estonian Information System Authority (RIA), Population Register Centre (VRK)
@@ -31,7 +32,6 @@ import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.io.FileUtils;
-import org.joda.time.DateTime;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -41,6 +41,8 @@ import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.time.Instant;
+import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -278,9 +280,9 @@ public class ConfigurationDirectoryV2 implements ConfigurationDirectory {
      */
     public static final boolean isExpired(Path fileName) {
         try {
-            DateTime expiresOn = getMetadata(fileName).getExpirationDate();
+            OffsetDateTime expiresOn = getMetadata(fileName).getExpirationDate();
 
-            if (expiresOn.isBeforeNow()) {
+            if (expiresOn.toInstant().isBefore(Instant.now())) {
                 log.info("{} expired on {}", fileName, expiresOn);
 
                 return true;

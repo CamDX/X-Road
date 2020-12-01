@@ -1,5 +1,6 @@
 /**
  * The MIT License
+ * Copyright (c) 2019- Nordic Institute for Interoperability Solutions (NIIS)
  * Copyright (c) 2018 Estonian Information System Authority (RIA),
  * Nordic Institute for Interoperability Solutions (NIIS), Population Register Centre (VRK)
  * Copyright (c) 2015-2017 Estonian Information System Authority (RIA), Population Register Centre (VRK)
@@ -47,7 +48,7 @@ import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 
 import java.nio.file.Path;
-import java.time.LocalTime;
+import java.time.OffsetDateTime;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -94,7 +95,6 @@ public final class ConfigurationClientMain {
      * 1) <anchor file> <configuration path> -- download and exit,
      * 2) <anchor file> -- download and verify,
      * 3) [no args] -- start as daemon.
-     *
      * @param args the arguments
      * @throws Exception if an error occurs
      */
@@ -340,8 +340,8 @@ public final class ConfigurationClientMain {
         private static DiagnosticsStatus status;
 
         static {
-            status = new DiagnosticsStatus(DiagnosticsErrorCodes.ERROR_CODE_UNINITIALIZED, LocalTime.now(),
-                    LocalTime.now().plusSeconds(SystemProperties.getConfigurationClientUpdateIntervalSeconds()));
+            status = new DiagnosticsStatus(DiagnosticsErrorCodes.ERROR_CODE_UNINITIALIZED, OffsetDateTime.now(),
+                    OffsetDateTime.now().plusSeconds(SystemProperties.getConfigurationClientUpdateIntervalSeconds()));
         }
 
         private static synchronized void setStatus(DiagnosticsStatus newStatus) {
@@ -371,7 +371,7 @@ public final class ConfigurationClientMain {
         public void jobWasExecuted(JobExecutionContext context, JobExecutionException jobException) {
             log.info("job was executed result={}", context.getResult());
 
-            setStatus((DiagnosticsStatus) context.getResult());
+            setStatus((DiagnosticsStatus)context.getResult());
         }
     }
 

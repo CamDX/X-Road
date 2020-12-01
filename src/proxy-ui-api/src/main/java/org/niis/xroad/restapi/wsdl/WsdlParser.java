@@ -1,5 +1,6 @@
 /**
  * The MIT License
+ * Copyright (c) 2019- Nordic Institute for Interoperability Solutions (NIIS)
  * Copyright (c) 2018 Estonian Information System Authority (RIA),
  * Nordic Institute for Interoperability Solutions (NIIS), Population Register Centre (VRK)
  * Copyright (c) 2015-2017 Estonian Information System Authority (RIA), Population Register Centre (VRK)
@@ -25,7 +26,6 @@
 package org.niis.xroad.restapi.wsdl;
 
 import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.io.IOUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.niis.xroad.restapi.exceptions.ErrorDeviation;
 import org.niis.xroad.restapi.service.ServiceException;
@@ -55,7 +55,10 @@ import javax.wsdl.xml.WSDLReader;
 import javax.xml.namespace.QName;
 
 import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
 import java.io.InputStream;
+import java.io.UncheckedIOException;
 import java.net.URL;
 import java.net.URLConnection;
 import java.security.SecureRandom;
@@ -65,6 +68,8 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+
+import static org.niis.xroad.restapi.exceptions.DeviationCodes.ERROR_WSDL_DOWNLOAD_FAILED;
 
 /**
  * Utils for WSDL parsing
@@ -90,6 +95,8 @@ public final class WsdlParser {
     private static final String TRANSPORT = "http://schemas.xmlsoap.org/soap/http";
 
     private static final String VERSION = "version";
+    private static final int BUF_SIZE = 8192;
+    private static final long MAX_DESCRIPTION_SIZE = 10 * 1024 * 1024;
 
     private WsdlParser() {
     }
@@ -99,14 +106,17 @@ public final class WsdlParser {
      * @param wsdlUrl the URL from which the WSDL is available
      * @return collection of ServiceInfo objects
      * @throws WsdlNotFoundException if a WSDL was not found at given URL
-     * @throws WsdlParseException if anything else than WsdlNotFoundException went wrong in parsing
+     * @throws WsdlParseException if anything else than WsdlNotFoundException went wrong in parsing (e.g. document
+     * size exceeds the limit defined by {@link #MAX_DESCRIPTION_SIZE})
      */
     public static Collection<ServiceInfo> parseWSDL(String wsdlUrl) throws WsdlNotFoundException, WsdlParseException {
         try {
             return internalParseWSDL(wsdlUrl);
         } catch (PrivateWsdlNotFoundException e) {
+            log.error("Reading WSDL from {} failed", wsdlUrl, e);
             throw new WsdlNotFoundException(e);
         } catch (Exception e) {
+            log.error("Reading WSDL from {} failed", wsdlUrl, e);
             throw new WsdlParseException(clarifyWsdlParsingException(e));
         }
     }
@@ -128,6 +138,7 @@ public final class WsdlParser {
     }
 
     private static Collection<ServiceInfo> internalParseWSDL(String wsdlUrl) throws Exception {
+        log.info("running WSDL parser");
         WSDLFactory wsdlFactory = WSDLFactory.newInstance(
                 "com.ibm.wsdl.factory.WSDLFactoryImpl");
 
@@ -273,8 +284,6 @@ public final class WsdlParser {
 
     private static final class TrustAllSslCertsWsdlLocator implements WSDLLocator {
 
-        private static final int ERROR_RESPONSE_CODE = 500;
-
         private final String wsdlUrl;
 
         TrustAllSslCertsWsdlLocator(String wsdlUrl) {
@@ -283,21 +292,34 @@ public final class WsdlParser {
 
         @Override
         public InputSource getBaseInputSource() {
-            try {
+            try (ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream()) {
                 URLConnection conn = new URL(wsdlUrl).openConnection();
                 if (conn instanceof HttpsURLConnection) {
                     configureHttps((HttpsURLConnection) conn);
                 }
 
-                // cache the response
-                byte[] response;
                 try (InputStream in = conn.getInputStream()) {
-                    response = IOUtils.toByteArray(in);
+                    long count = 0;
+                    int n;
+                    byte[] buf = new byte[BUF_SIZE];
+                    while ((n = in.read(buf)) != -1) {
+                        count += n;
+                        if (count > MAX_DESCRIPTION_SIZE) {
+                            throw new UncheckedIOException("Error reading WSDL: Size exceeds "
+                                    + MAX_DESCRIPTION_SIZE + " bytes.", new IOException());
+                        }
+                        byteArrayOutputStream.write(buf, 0, n);
+                    }
                 }
-                log.trace("Received WSDL response: {}", new String(response));
+                byte[] response = byteArrayOutputStream.toByteArray();
+                if (log.isTraceEnabled()) {
+                    log.trace("Received WSDL response: {}", new String(response));
+                }
 
                 return new InputSource(new ByteArrayInputStream(response));
-            } catch (Throwable t) {
+            } catch (UncheckedIOException e) {
+                throw e;
+            } catch (Exception t) {
                 throw new PrivateWsdlNotFoundException(t);
             }
         }
@@ -361,6 +383,10 @@ public final class WsdlParser {
             super(toListOrNull(t.getMessage()));
         }
 
+        public WsdlParseException(String message) {
+            super(message);
+        }
+
         private static List<String> toListOrNull(String message) {
             if (message == null) {
                 return null;
@@ -374,9 +400,6 @@ public final class WsdlParser {
      * Thrown if WSDL file is not found
      */
     public static class WsdlNotFoundException extends ServiceException {
-
-        public static final String ERROR_WSDL_DOWNLOAD_FAILED = "wsdl_download_failed";
-
         public WsdlNotFoundException(Throwable cause) {
             super(cause, new ErrorDeviation(ERROR_WSDL_DOWNLOAD_FAILED));
         }
